@@ -25,11 +25,6 @@ button,input{font:inherit}
 .err{color:var(--danger);font-weight:600;min-height:1.4em;margin:8px 0 0}
 .hint{color:var(--muted);margin:0}
 
-.gate{min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:24px}
-.gate form{width:100%;max-width:400px}
-.gate label{font-weight:600;display:block;margin-top:16px}
-.gate input{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);margin:6px 0 0}
-.gate .btn{margin-top:18px}
 
 .wrap{max-width:1000px;margin:0 auto;padding:clamp(16px,4vw,40px)}
 .bar{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:20px}
@@ -51,21 +46,6 @@ button,input{font:inherit}
 </style>
 </head>
 <body>
-
-<main class="gate" id="gate">
-  <form id="form" autocomplete="off">
-    <h1>Admin</h1>
-    <p class="hint" style="margin-top:8px">Halaman khusus pengelola.</p>
-    <label for="u">Username</label>
-    <input id="u" type="text" autocapitalize="none" spellcheck="false" required>
-    <div id="pwBox" hidden>
-      <label for="p">Password</label>
-      <input id="p" type="password" autocomplete="current-password">
-    </div>
-    <button class="btn" id="go" type="submit">Masuk</button>
-    <p class="err" id="gerr" role="alert"></p>
-  </form>
-</main>
 
 <div class="wrap" id="app" hidden>
   <div class="bar">
@@ -94,28 +74,9 @@ button,input{font:inherit}
   const tset = v => { try{ v ? sessionStorage.setItem(TK, v) : sessionStorage.removeItem(TK); }catch(e){} };
   const fmt = b => b >= 1073741824 ? (b/1073741824).toFixed(2)+" GB" : b >= 1048576 ? (b/1048576).toFixed(1)+" MB" : Math.max(0,Math.round(b/1024))+" KB";
 
-  function showGate(){ $("app").hidden = true; $("gate").hidden = false; $("pwBox").hidden = true; $("p").value = ""; $("u").focus(); }
-  function showApp(){ $("gate").hidden = true; $("app").hidden = false; load(); }
-
-  /* login: username dulu, kalau "kecap" otomatis minta password */
-  $("form").addEventListener("submit", async e => {
-    e.preventDefault();
-    const u = $("u").value.trim(), err = $("gerr");
-    err.textContent = "";
-    if (u.toLowerCase() !== "kecap"){ err.textContent = "Username tidak dikenali."; return; }
-    if ($("pwBox").hidden){ $("pwBox").hidden = false; $("p").required = true; $("p").focus(); return; }
-    const btn = $("go"); btn.disabled = true;
-    try{
-      const r = await fetch("/api/admin-login", { method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ username: u, password: $("p").value }) });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || "Gagal masuk");
-      token = d.token; tset(token); showApp();
-    }catch(ex){ err.textContent = ex.message; $("p").select(); }
-    finally{ btn.disabled = false; }
-  });
-  $("u").addEventListener("input", () => { if ($("u").value.trim().toLowerCase() !== "kecap"){ $("pwBox").hidden = true; $("p").required = false; } });
-  $("out").addEventListener("click", () => { tset(""); token = ""; showGate(); });
+  const toHome = () => { location.replace("/"); };
+  function showApp(){ $("app").hidden = false; load(); }
+  $("out").addEventListener("click", () => { tset(""); token = ""; toHome(); });
 
   /* daftar */
   async function load(){
@@ -167,14 +128,14 @@ button,input{font:inherit}
       const r = await fetch("/api/admin-delete", { method:"POST",
         headers:{"Content-Type":"application/json","Authorization":"Bearer "+token}, body: JSON.stringify({ keys }) });
       const d = await r.json();
-      if (r.status === 401){ tset(""); token = ""; showGate(); $("gerr").textContent = d.error; return; }
+      if (r.status === 401){ tset(""); token = ""; toHome(); return; }
       if (!r.ok) throw new Error(d.error || "Gagal menghapus");
       await load();
     }catch(ex){ $("aerr").textContent = ex.message; sync(); }
   });
 
   token = tget();
-  if (token) showApp(); else showGate();
+  if (token) showApp(); else toHome();
 })();
 </script>
 </body>

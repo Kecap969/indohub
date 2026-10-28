@@ -86,8 +86,12 @@ small{color:var(--muted)}
     <label for="username">Username</label>
     <input id="username" name="username" type="text" minlength="2" maxlength="30" required
            pattern="[A-Za-z0-9_\-]{2,30}" autocapitalize="none" spellcheck="false" placeholder="mis. budi_01">
+    <div id="pwBox" hidden>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password">
+    </div>
     <p class="hint">2-30 karakter: huruf, angka, _ atau -</p>
-    <button class="btn" type="submit">Masuk</button>
+    <button class="btn" id="gateBtn" type="submit">Masuk</button>
     <p class="err" id="gateErr" role="alert"></p>
   </form>
 </main>
@@ -153,12 +157,34 @@ small{color:var(--muted)}
     $("who").textContent = username;
     loadList();
   }
-  $("gateForm").addEventListener("submit", e => {
+  const isAdminName = v => v.trim().toLowerCase() === "kecap";
+  function togglePw(focus){
+    const adm = isAdminName($("username").value);
+    $("pwBox").hidden = !adm; $("password").required = adm;
+    if (!adm) $("password").value = "";
+    if (adm && focus) $("password").focus();
+  }
+  $("username").addEventListener("input", () => togglePw(false));
+  $("gateForm").addEventListener("submit", async e => {
     e.preventDefault();
-    const v = $("username").value.trim();
-    if (!NAME_RE.test(v)){ $("gateErr").textContent = "Username harus 2-30 karakter: huruf, angka, _ atau -"; return; }
-    if (v.toLowerCase() === "kecap"){ $("gateErr").textContent = "Username ini khusus admin. Gunakan username lain."; return; }
-    username = v; store.set(v); $("gateErr").textContent = ""; showApp();
+    const v = $("username").value.trim(), err = $("gateErr");
+    err.textContent = "";
+    if (!NAME_RE.test(v)){ err.textContent = "Username harus 2-30 karakter: huruf, angka, _ atau -"; return; }
+    if (isAdminName(v)){
+      if ($("pwBox").hidden){ togglePw(true); return; }
+      const btn = $("gateBtn"); btn.disabled = true;
+      try{
+        const r = await fetch("/api/admin-login", { method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ username: v, password: $("password").value }) });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || "Gagal masuk");
+        try{ sessionStorage.setItem("admin_token", d.token); }catch(x){}
+        location.href = "/admin";
+      }catch(ex){ err.textContent = ex.message; $("password").select(); }
+      finally{ btn.disabled = false; }
+      return;
+    }
+    username = v; store.set(v); showApp();
   });
   $("logout").addEventListener("click", () => {
     store.del(); username = ""; $("username").value = "";
