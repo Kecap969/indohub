@@ -1,22 +1,43 @@
 (function(){
   const $ = id => document.getElementById(id);
-  const NAME_KEY = "media_username", TOKEN_KEY = "admin_token";
+  const NAME_KEY = "media_username", TOKEN_KEY = "admin_token", SEEN_KEY = "media_seen";
   const NAME_RE = /^[A-Za-z0-9_-]{2,30}$/;
   let cfg = { title:"Perpustakaan Media", subtitle:"", maxUploadMB:2048, adminUser:"kecap" };
-  let username = "", items = [], current = -1, hls = null, token = "";
+  let username = "", items = [], token = "", hls = null;
+  let tab = "home", openAlbum = null, albumItems = [], current = -1;
 
-  const ls = {
-    get(k){ try{ return localStorage.getItem(k) || ""; }catch(e){ return ""; } },
-    set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} },
-    del(k){ try{ localStorage.removeItem(k); }catch(e){} }
-  };
-  const ss = {
-    get(k){ try{ return sessionStorage.getItem(k) || ""; }catch(e){ return ""; } },
-    set(k,v){ try{ sessionStorage.setItem(k,v); }catch(e){} },
-    del(k){ try{ sessionStorage.removeItem(k); }catch(e){} }
-  };
+  const store = area => ({
+    get(k){ try{ return area.getItem(k) || ""; }catch(e){ return ""; } },
+    set(k,v){ try{ area.setItem(k,v); }catch(e){} },
+    del(k){ try{ area.removeItem(k); }catch(e){} }
+  });
+  const ls = store(window.localStorage), ss = store(window.sessionStorage);
   const isAdminName = v => v.trim().toLowerCase() === cfg.adminUser;
   const fmtSize = b => b >= 1073741824 ? (b/1073741824).toFixed(1)+" GB" : b >= 1048576 ? (b/1048576).toFixed(1)+" MB" : Math.max(1,Math.round(b/1024))+" KB";
+  const ts = it => new Date(it.lastModified).getTime();
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const CATNAME = { free:"Gratis", premium:"Premium" };
+
+  const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+  const ICON_AUDIO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>';
+  const ICON_BELL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15L6 16z"/><path d="M10 21h4"/></svg>';
+  const ICON_FOLDER = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H9l2 2.5h7.5A2.5 2.5 0 0 1 21 9v8.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5v-11z"/></svg>';
+
+  /* ---------- data: kelompokkan per kategori & album ---------- */
+  function albumsOf(cat){
+    const map = new Map();
+    items.filter(i => i.category === cat).forEach(i => {
+      const k = i.album.toLowerCase();
+      if (!map.has(k)) map.set(k, { name: i.album, list: [], latest: 0 });
+      const a = map.get(k); a.list.push(i); a.latest = Math.max(a.latest, ts(i));
+    });
+    return [...map.values()].sort((a,b) => b.latest - a.latest);
+  }
+  async function fetchItems(){
+    const r = await fetch("/api/list"); const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Gagal memuat daftar");
+    return d.items;
+  }
 
   /* ---------- pindah tampilan ---------- */
   function view(name){
@@ -27,27 +48,126 @@
   function showGate(){ $("player").pause(); view("gate"); $("username").focus(); }
   function showApp(){
     $("who").textContent = username; $("avatar").textContent = username.charAt(0);
-    view("app"); setTab("home"); loadList();
+    view("app"); openAlbum = null; setTab("home"); loadItems();
   }
   function showAdmin(){ view("admin"); loadAdmin(); }
 
-  /* ---------- tab & notifikasi (halaman pengguna) ---------- */
-  const SEEN_KEY = "media_seen";
-  const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
-  const ICON_AUDIO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>';
-  const ICON_BELL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15L6 16z"/><path d="M10 21h4"/></svg>';
-  const TABS = ["home","premium","notif","profil"];
-  let tab = "home";
-  const seen = () => Number(ls.get(SEEN_KEY)) || 0;
-  const ts = it => new Date(it.lastModified).getTime();
+  /* ---------- tab bawah ---------- */
+  const TABS = ["catalog","notif","profil"];
   function setTab(name){
     tab = name;
-    TABS.forEach(t => $("tab-" + t).hidden = t !== name);
-    document.querySelectorAll(".bottomnav button").forEach(b => { if (b.dataset.tab === name) b.setAttribute("aria-current","page"); else b.removeAttribute("aria-current"); });
+    const pane = name === "home" || name === "premium" ? "catalog" : name;
+    TABS.forEach(t => $("tab-" + t).hidden = t !== pane);
+    document.querySelectorAll(".bottomnav button").forEach(b => {
+      if (b.dataset.tab === name) b.setAttribute("aria-current","page"); else b.removeAttribute("aria-current");
+    });
+    if (pane === "catalog"){ closeAlbum(false); renderAlbums(); }
+    else $("player").pause();
     if (name === "notif"){ renderNotifs(); if (items.length) ls.set(SEEN_KEY, String(Math.max(...items.map(ts)))); updateDot(); }
     window.scrollTo(0, 0);
   }
   document.querySelectorAll(".bottomnav button").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
+
+  /* ---------- daftar album ---------- */
+  function hue(s){ let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return h; }
+  function renderAlbums(){
+    const cat = tab === "premium" ? "premium" : "free";
+    $("catTitle").textContent = cat === "premium" ? "Premium" : "Gratis";
+    const box = $("albums"); box.innerHTML = "";
+    const list = albumsOf(cat);
+    if (!list.length){
+      box.appendChild(el("p", "empty", cat === "premium" ? "Belum ada album premium." : "Belum ada album."));
+      return;
+    }
+    list.forEach(a => {
+      const b = el("button", "album"); b.type = "button";
+      const ic = el("span", "folder"); ic.innerHTML = ICON_FOLDER; ic.style.setProperty("--h", hue(a.name.toLowerCase()));
+      b.append(ic, el("b", "", a.name), el("small", "", a.list.length + " video"));
+      b.addEventListener("click", () => openAlbumView(cat, a.name));
+      box.appendChild(b);
+    });
+  }
+
+  /* ---------- isi album + pemutar ---------- */
+  function openAlbumView(cat, name, push){
+    openAlbum = { cat, name };
+    albumItems = items.filter(i => i.category === cat && i.album.toLowerCase() === name.toLowerCase())
+                      .sort((a,b) => ts(a) - ts(b));
+    $("albumView").hidden = true; $("watchView").hidden = false;
+    $("crumb").textContent = CATNAME[cat] + " › " + name;
+    $("listTitle").textContent = name + " · " + albumItems.length + " video";
+    current = -1; renderList();
+    if (push !== false) history.pushState({ album: name }, "");
+    window.scrollTo(0, 0);
+  }
+  function closeAlbum(pop){
+    if (!openAlbum) return;
+    openAlbum = null; $("player").pause();
+    $("watchView").hidden = true; $("albumView").hidden = false;
+    if (pop && history.state && history.state.album) history.back();
+  }
+  $("backBtn").addEventListener("click", () => { closeAlbum(true); renderAlbums(); });
+  window.addEventListener("popstate", () => { if (openAlbum){ closeAlbum(false); renderAlbums(); } });
+
+  function renderList(){
+    const list = $("list"); list.innerHTML = "";
+    if (!albumItems.length){ list.appendChild(el("li", "empty", "Album ini kosong.")); return; }
+    albumItems.forEach((it, i) => {
+      const li = el("li"), b = el("button"); b.type = "button";
+      const th = el("span", "thumb"); th.innerHTML = it.type === "audio" ? ICON_AUDIO : ICON_PLAY;
+      const left = el("span");
+      left.append(el("span", "ttl", it.title), el("small", "", it.type === "audio" ? "Audio" : "Video"));
+      b.append(th, left, el("span", "size", fmtSize(it.size)));
+      b.addEventListener("click", () => play(i, true));
+      li.appendChild(b); list.appendChild(li);
+    });
+    play(0, false);
+  }
+  function mark(){ document.querySelectorAll("#list button").forEach((b,k)=>b.setAttribute("aria-current", k===current)); }
+
+  function loadHls(){
+    return new Promise((ok, no) => {
+      if (window.Hls) return ok();
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js";
+      s.onload = ok; s.onerror = no; document.head.appendChild(s);
+    });
+  }
+  async function attach(src){
+    const p = $("player");
+    if (hls){ hls.destroy(); hls = null; }
+    if (/\.m3u8(\?|$)/i.test(src) && !p.canPlayType("application/vnd.apple.mpegurl")){
+      await loadHls();
+      if (window.Hls && Hls.isSupported()){ hls = new Hls(); hls.loadSource(src); hls.attachMedia(p); return; }
+    }
+    p.src = src;
+  }
+  async function play(i, auto){
+    const it = albumItems[i]; if (!it) return;
+    current = i; $("plErr").textContent = "";
+    $("stage").classList.toggle("is-audio", it.type === "audio");
+    $("cover").textContent = it.title;
+    $("nowTitle").textContent = it.title;
+    mark();
+    await attach(it.url);
+    if (auto) $("player").play().catch(()=>{});
+  }
+  $("player").addEventListener("error", () => {
+    $("plErr").textContent = "Media tidak bisa dimuat. Periksa domain publik R2 dan pengaturan CORS.";
+  });
+  $("player").addEventListener("ended", () => { if (current + 1 < albumItems.length) play(current + 1, true); });
+
+  async function loadItems(){
+    $("albums").innerHTML = ""; $("albums").appendChild(el("p", "empty", "Memuat..."));
+    try{ items = await fetchItems(); }
+    catch(e){ items = []; $("albums").innerHTML = ""; $("albums").appendChild(el("p", "empty", e.message)); return; }
+    $("mediaCount").textContent = items.length + " media tersedia";
+    if (!openAlbum && (tab === "home" || tab === "premium")) renderAlbums();
+    updateDot();
+  }
+
+  /* ---------- notifikasi ---------- */
+  const seen = () => Number(ls.get(SEEN_KEY)) || 0;
   function relTime(d){
     const s = Math.max(0, (Date.now() - new Date(d).getTime()) / 1000);
     if (s < 60) return "baru saja";
@@ -57,25 +177,22 @@
     return new Date(d).toLocaleDateString("id-ID", { day:"numeric", month:"short", year:"numeric" });
   }
   function updateDot(){
-    if (!items.length) { $("notifDot").hidden = true; return; }
+    if (!items.length){ $("notifDot").hidden = true; return; }
     if (!ls.get(SEEN_KEY)) ls.set(SEEN_KEY, String(Math.max(...items.map(ts)))); // kunjungan pertama: anggap sudah dilihat
     const n = items.filter(it => ts(it) > seen()).length;
     $("notifDot").hidden = !n || tab === "notif"; $("notifDot").textContent = n > 9 ? "9+" : n;
   }
   function renderNotifs(){
     const ul = $("notifs"); ul.innerHTML = "";
-    if (!items.length){
-      const li = document.createElement("li"); li.className = "empty"; li.textContent = "Belum ada notifikasi.";
-      ul.appendChild(li); return;
-    }
+    if (!items.length){ ul.appendChild(el("li", "empty", "Belum ada notifikasi.")); return; }
     const last = seen();
     items.slice(0, 20).forEach(it => {
-      const li = document.createElement("li"); if (ts(it) > last) li.className = "new";
-      const ic = document.createElement("span"); ic.className = "ic"; ic.innerHTML = ICON_BELL;
-      const box = document.createElement("div");
-      const b = document.createElement("b"); b.textContent = "Media baru: " + it.title;
-      const sm = document.createElement("small"); sm.textContent = relTime(it.lastModified);
-      box.append(b, sm); li.append(ic, box); ul.appendChild(li);
+      const li = el("li", ts(it) > last ? "new" : "");
+      const ic = el("span", "ic"); ic.innerHTML = ICON_BELL;
+      const box = el("div");
+      box.append(el("b", "", "Media baru: " + it.title),
+                 el("small", "", CATNAME[it.category] + " › " + it.album + " · " + relTime(it.lastModified)));
+      li.append(ic, box); ul.appendChild(li);
     });
   }
 
@@ -112,85 +229,40 @@
     ls.del(NAME_KEY); username = ""; $("username").value = ""; togglePw(false); showGate();
   });
 
-  /* ---------- daftar & pemutar ---------- */
-  async function fetchItems(){
-    const r = await fetch("/api/list"); const d = await r.json();
-    if (!r.ok) throw new Error(d.error || "Gagal memuat daftar");
-    return d.items;
+  /* ---------- dashboard admin: upload ---------- */
+  const NEW = "__new__";
+  const catVal = () => document.querySelector('input[name=cat]:checked').value;
+  function refreshAlbumChoices(){
+    const sel = $("albumSel"), names = albumsOf(catVal()).map(a => a.name);
+    sel.innerHTML = "";
+    names.forEach(n => { const o = el("option", "", n); o.value = n; sel.appendChild(o); });
+    const o = el("option", "", "+ Buat album baru"); o.value = NEW; sel.appendChild(o);
+    const none = !names.length;
+    sel.hidden = none; $("albumSelLbl").hidden = none;
+    if (none) sel.value = NEW;
+    toggleNew();
   }
-  async function loadList(){
-    const list = $("list");
-    list.innerHTML = '<li class="empty">Memuat daftar...</li>';
-    try{ items = await fetchItems(); }
-    catch(e){
-      items = []; list.innerHTML = "";
-      const li = document.createElement("li"); li.className = "empty"; li.textContent = e.message; list.appendChild(li);
-      return;
-    }
-    renderList(); updateDot();
-    $("mediaCount").textContent = items.length + " media tersedia";
+  function toggleNew(){
+    const isNew = $("albumSel").value === NEW;
+    $("albumNew").hidden = !isNew;
+    if (!isNew) $("albumNew").value = "";
   }
-  function renderList(){
-    const list = $("list"); list.innerHTML = "";
-    if (!items.length){
-      const li = document.createElement("li"); li.className = "empty"; li.textContent = "Belum ada media.";
-      list.appendChild(li); return;
-    }
-    items.forEach((it, i) => {
-      const li = document.createElement("li"), b = document.createElement("button");
-      b.type = "button";
-      const th = document.createElement("span"); th.className = "thumb"; th.innerHTML = it.type === "audio" ? ICON_AUDIO : ICON_PLAY;
-      const left = document.createElement("span");
-      const t = document.createElement("span"); t.className = "ttl"; t.textContent = it.title;
-      const kind = document.createElement("small"); kind.textContent = it.type === "audio" ? "Audio" : "Video";
-      left.append(t, kind);
-      const s = document.createElement("span"); s.className = "size"; s.textContent = fmtSize(it.size);
-      b.append(th, left, s);
-      b.addEventListener("click", () => play(i, true));
-      li.appendChild(b); list.appendChild(li);
-    });
-    if (current < 0 || current >= items.length) play(0, false);
-    else mark();
-  }
-  function mark(){ document.querySelectorAll("#list button").forEach((b,k)=>b.setAttribute("aria-current", k===current)); }
+  document.querySelectorAll('input[name=cat]').forEach(r => r.addEventListener("change", refreshAlbumChoices));
+  $("albumSel").addEventListener("change", () => { toggleNew(); if (!$("albumNew").hidden) $("albumNew").focus(); });
 
-  function loadHls(){
-    return new Promise((ok, no) => {
-      if (window.Hls) return ok();
-      const s = document.createElement("script");
-      s.src = "https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js";
-      s.onload = ok; s.onerror = no; document.head.appendChild(s);
-    });
+  function chosenAlbum(){
+    if ($("albumSel").value !== NEW) return $("albumSel").value;
+    const typed = $("albumNew").value.replace(/[^\p{L}\p{N} _-]/gu, "").replace(/\s+/g, " ").trim();
+    const same = albumsOf(catVal()).find(a => a.name.toLowerCase() === typed.toLowerCase()); // jangan buat album ganda
+    return same ? same.name : typed;
   }
-  async function attach(src){
-    const p = $("player");
-    if (hls){ hls.destroy(); hls = null; }
-    if (/\.m3u8(\?|$)/i.test(src) && !p.canPlayType("application/vnd.apple.mpegurl")){
-      await loadHls();
-      if (window.Hls && Hls.isSupported()){ hls = new Hls(); hls.loadSource(src); hls.attachMedia(p); return; }
-    }
-    p.src = src;
-  }
-  async function play(i, auto){
-    const it = items[i]; if (!it) return;
-    current = i; $("plErr").textContent = "";
-    $("stage").classList.toggle("is-audio", it.type === "audio");
-    $("cover").textContent = it.title;
-    $("nowTitle").textContent = it.title;
-    mark();
-    await attach(it.url);
-    if (auto) $("player").play().catch(()=>{});
-  }
-  $("player").addEventListener("error", () => {
-    $("plErr").textContent = "Media tidak bisa dimuat. Periksa domain publik R2 dan pengaturan CORS.";
-  });
-  $("player").addEventListener("ended", () => { if (current + 1 < items.length) play(current + 1, true); });
 
-  /* ---------- upload ---------- */
   $("uploadBtn").addEventListener("click", async () => {
     const f = $("file").files[0], err = $("upErr"), ok = $("upOk"), prog = $("prog"), btn = $("uploadBtn");
     err.textContent = ""; ok.textContent = "";
     if (!f){ err.textContent = "Pilih file dulu."; return; }
+    const album = chosenAlbum(), category = catVal();
+    if (album.length < 2){ err.textContent = "Isi nama album (minimal 2 karakter)."; $("albumNew").focus(); return; }
     const type = f.type || (/\.(mp4|m4v|mov)$/i.test(f.name) ? "video/mp4" : /\.mp3$/i.test(f.name) ? "audio/mpeg" : "");
     if (!/^(video|audio)\//.test(type)){ err.textContent = "Hanya file video atau audio."; return; }
     if (f.size > cfg.maxUploadMB * 1048576){ err.textContent = "File terlalu besar (maks " + cfg.maxUploadMB + " MB)."; return; }
@@ -199,7 +271,7 @@
     try{
       const r = await fetch("/api/presign", {
         method: "POST", headers: {"Content-Type":"application/json","Authorization":"Bearer "+token},
-        body: JSON.stringify({ filename: f.name, contentType: type, size: f.size })
+        body: JSON.stringify({ category, album, filename: f.name, contentType: type, size: f.size })
       });
       const d = await r.json();
       if (r.status === 401){ adminExpired(); return; }
@@ -214,9 +286,9 @@
         x.onerror = () => reject(new Error("Upload gagal. Periksa CORS R2: method PUT dan header Content-Type harus diizinkan."));
         x.send(f);
       });
-      ok.textContent = "Upload selesai: " + f.name;
+      ok.textContent = "Upload selesai: " + f.name + " → " + CATNAME[category] + " › " + d.album;
       $("file").value = "";
-      await loadAdmin();
+      await loadAdmin(d.album);
     }catch(e){
       err.textContent = e.message;
     }finally{
@@ -224,13 +296,17 @@
     }
   });
 
-  /* ---------- dashboard admin ---------- */
+  /* ---------- dashboard admin: daftar ---------- */
   function adminExpired(){ ss.del(TOKEN_KEY); token = ""; $("username").value = ""; togglePw(false); showGate(); $("gateErr").textContent = "Sesi admin habis, silakan masuk lagi"; }
   $("aOut").addEventListener("click", () => { ss.del(TOKEN_KEY); token = ""; $("username").value = ""; togglePw(false); showGate(); });
 
-  async function loadAdmin(){
+  async function loadAdmin(keepAlbum){
     $("aerr").textContent = "";
+    const prevCat = catVal(), prevSel = $("albumSel").value;
     try{ items = await fetchItems(); }catch(ex){ items = []; $("aerr").textContent = ex.message; }
+    refreshAlbumChoices();
+    if (keepAlbum){ const o = [...$("albumSel").options].find(o => o.value.toLowerCase() === keepAlbum.toLowerCase()); if (o){ $("albumSel").value = o.value; toggleNew(); } }
+    else if (prevSel && [...$("albumSel").options].some(o => o.value === prevSel)){ $("albumSel").value = prevSel; toggleNew(); }
     renderAdmin();
   }
   const checks = () => [...document.querySelectorAll("#alist input[type=checkbox]")];
@@ -240,32 +316,35 @@
   }
   function renderAdmin(){
     const q = $("q").value.trim().toLowerCase();
-    const shown = items.filter(i => !q || i.title.toLowerCase().includes(q) || i.uploader.toLowerCase().includes(q));
+    const shown = items.filter(i => !q || i.title.toLowerCase().includes(q) || i.album.toLowerCase().includes(q) || CATNAME[i.category].toLowerCase().includes(q));
     $("sCount").textContent = items.length;
     $("sSize").textContent = fmtSize(items.reduce((a,i)=>a+i.size,0));
     const ul = $("alist"); ul.innerHTML = ""; $("all").checked = false;
-    if (!shown.length){
-      const li = document.createElement("li"); li.className = "empty"; li.style.display = "block"; li.textContent = "Tidak ada file.";
-      ul.appendChild(li); sync(); return;
-    }
-    shown.forEach(it => {
-      const li = document.createElement("li");
-      const cb = document.createElement("input"); cb.type = "checkbox"; cb.dataset.key = it.key; cb.setAttribute("aria-label","Pilih "+it.title);
-      cb.addEventListener("change", sync);
-      const mid = document.createElement("div");
-      const n = document.createElement("div"); n.className = "name"; n.textContent = it.title;
-      const m = document.createElement("div"); m.className = "meta";
-      m.textContent = it.uploader + " · " + fmtSize(it.size) + " · " + new Date(it.lastModified).toLocaleString("id-ID");
-      mid.append(n, m);
-      const a = document.createElement("div"); a.className = "acts";
-      const open = document.createElement("a"); open.href = it.url; open.target = "_blank"; open.rel = "noopener"; open.textContent = "Buka";
-      const cp = document.createElement("button"); cp.type = "button"; cp.textContent = "Salin link";
-      cp.addEventListener("click", async () => {
-        try{ await navigator.clipboard.writeText(it.url); cp.textContent = "Tersalin"; setTimeout(()=>cp.textContent="Salin link",1500); }
-        catch(e){ prompt("Salin link:", it.url); }
+    if (!shown.length){ const li = el("li", "empty", "Tidak ada file."); li.style.display = "block"; ul.appendChild(li); sync(); return; }
+    ["free","premium"].forEach(cat => {
+      const inCat = shown.filter(i => i.category === cat); if (!inCat.length) return;
+      const byAlbum = new Map();
+      inCat.forEach(i => { const k = i.album.toLowerCase(); if (!byAlbum.has(k)) byAlbum.set(k, { name: i.album, list: [] }); byAlbum.get(k).list.push(i); });
+      byAlbum.forEach(a => {
+        const gh = el("li", "grp"); gh.append(el("span", "pill " + cat, CATNAME[cat]), el("b", "", a.name), el("small", "", a.list.length + " file"));
+        ul.appendChild(gh);
+        a.list.forEach(it => {
+          const li = el("li");
+          const cb = el("input"); cb.type = "checkbox"; cb.dataset.key = it.key; cb.setAttribute("aria-label","Pilih "+it.title);
+          cb.addEventListener("change", sync);
+          const mid = el("div");
+          mid.append(el("div", "name", it.title), el("div", "meta", fmtSize(it.size) + " · " + new Date(it.lastModified).toLocaleString("id-ID")));
+          const acts = el("div", "acts");
+          const open = el("a", "", "Buka"); open.href = it.url; open.target = "_blank"; open.rel = "noopener";
+          const cp = el("button", "", "Salin link"); cp.type = "button";
+          cp.addEventListener("click", async () => {
+            try{ await navigator.clipboard.writeText(it.url); cp.textContent = "Tersalin"; setTimeout(()=>cp.textContent="Salin link",1500); }
+            catch(e){ prompt("Salin link:", it.url); }
+          });
+          acts.append(open, cp);
+          li.append(cb, mid, acts); ul.appendChild(li);
+        });
       });
-      a.append(open, cp);
-      li.append(cb, mid, a); ul.appendChild(li);
     });
     sync();
   }

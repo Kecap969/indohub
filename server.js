@@ -10,6 +10,8 @@ const SITE = require("./site.config");
 const { ADMIN_USER, checkLogin, makeToken, needAdmin } = require("./auth");
 const { missingEnv, client: r2, bucket, publicBase, VIDEO, AUDIO } = require("./r2");
 
+// Nama album jadi nama folder: hanya huruf, angka, spasi, - dan _
+const cleanAlbum = (v) => String(v || "").replace(/[^\p{L}\p{N} _-]/gu, "").replace(/\s+/g, " ").trim().slice(0, 40);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const needR2 = (req, res, next) => {
   const miss = missingEnv();
@@ -37,24 +39,45 @@ app.get("/app.js", (req, res) => res.type("js").send(js));
 
 app.get("/api/config", (req, res) => res.json({ ...SITE, adminUser: ADMIN_USER }));
 
+// Struktur bucket: free/<album>/<ts>-<file>, premium/<album>/<ts>-<file>
+// File lama di uploads/<user>/... ditampilkan sebagai album "Lainnya" (gratis).
+const LEGACY_ALBUM = "Lainnya";
+const prettyTitle = (f) => f.replace(/^\d+-/, "").replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim() || f;
+
+async function listPrefix(prefix) {
+  const all = [];
+  let token;
+  for (let i = 0; i < 5; i++) { // maks 5 x 1000 file per folder
+    const out = await r2().send(new ListObjectsV2Command({ Bucket: bucket(), Prefix: prefix, MaxKeys: 1000, ContinuationToken: token }));
+    all.push(...(out.Contents || []));
+    if (!out.IsTruncated) break;
+    token = out.NextContinuationToken;
+  }
+  return all;
+}
+
 app.get("/api/list", needR2, async (req, res) => {
   try {
-    const out = await r2().send(new ListObjectsV2Command({ Bucket: bucket(), Prefix: "uploads/", MaxKeys: 1000 }));
-    const items = (out.Contents || [])
+    const lists = await Promise.all(["free/", "premium/", "uploads/"].map(listPrefix));
+    const items = lists.flat()
       .filter((o) => VIDEO.test(o.Key) || AUDIO.test(o.Key))
       .map((o) => {
-        const parts = o.Key.split("/"); // uploads/<user>/<ts>-<nama>
+        const parts = o.Key.split("/");
+        const legacy = parts[0] === "uploads";
+        if (!legacy && parts.length < 3) return null; // harus free|premium/<album>/<file>
         return {
           key: o.Key,
-          title: parts[parts.length - 1].replace(/^\d+-/, ""),
-          uploader: parts[1] || "",
+          category: legacy ? "free" : parts[0],
+          album: legacy ? LEGACY_ALBUM : parts[1],
+          title: prettyTitle(parts[parts.length - 1]),
           size: o.Size,
           lastModified: o.LastModified,
           type: AUDIO.test(o.Key) ? "audio" : "video",
-          url: `${publicBase()}/${o.Key}`,
+          url: `${publicBase()}/${parts.map(encodeURIComponent).join("/")}`,
         };
       })
-      .sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified));
+      .filter(Boolean)
+      .sort((x, y) => new Date(y.lastModified) - new Date(x.lastModified));
     res.setHeader("Cache-Control", "no-store");
     res.json({ items });
   } catch (e) {
@@ -63,22 +86,26 @@ app.get("/api/list", needR2, async (req, res) => {
 });
 
 app.post("/api/presign", needAdmin, needR2, async (req, res) => {
-  const { filename, contentType, size } = req.body || {};
+  const { category, album, filename, contentType, size } = req.body || {};
+  if (category !== "free" && category !== "premium")
+    return res.status(400).json({ error: "Pilih kategori Gratis atau Premium" });
+  const albumName = cleanAlbum(album);
+  if (albumName.length < 2) return res.status(400).json({ error: "Nama album minimal 2 karakter (huruf, angka, spasi, - atau _)" });
   if (!/^(video|audio)\//.test(contentType || ""))
     return res.status(400).json({ error: "Hanya file video atau audio yang boleh diupload" });
   if (!filename || typeof filename !== "string") return res.status(400).json({ error: "Nama file kosong" });
   if (!size || size > SITE.maxUploadMB * 1024 * 1024)
     return res.status(400).json({ error: `Ukuran file maksimal ${SITE.maxUploadMB} MB` });
 
-  const safeName = filename.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(-80) || "file";
-  const key = `uploads/${ADMIN_USER}/${Date.now()}-${safeName}`;
+  const safeName = filename.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(-80) || "file";
+  const key = `${category}/${albumName}/${Date.now()}-${safeName}`;
   try {
     const uploadUrl = await getSignedUrl(
       r2(),
       new PutObjectCommand({ Bucket: bucket(), Key: key, ContentType: contentType }),
       { expiresIn: 900 }
     );
-    res.json({ uploadUrl, key, publicUrl: `${publicBase()}/${key}` });
+    res.json({ uploadUrl, key, album: albumName });
   } catch (e) {
     res.status(500).json({ error: "Gagal membuat URL upload" });
   }
@@ -100,8 +127,8 @@ app.post("/api/delete", needAdmin, needR2, async (req, res) => {
   const keys = (req.body && req.body.keys) || [];
   if (!Array.isArray(keys) || !keys.length || keys.length > 1000)
     return res.status(400).json({ error: "Daftar file tidak valid" });
-  if (!keys.every((k) => typeof k === "string" && k.startsWith("uploads/") && !k.includes("..")))
-    return res.status(400).json({ error: "Hanya file di folder uploads/ yang boleh dihapus" });
+  if (!keys.every((k) => typeof k === "string" && /^(free|premium|uploads)\//.test(k) && !k.includes("..")))
+    return res.status(400).json({ error: "Hanya file di folder free/, premium/ atau uploads/ yang boleh dihapus" });
   try {
     await r2().send(new DeleteObjectsCommand({
       Bucket: bucket(),
