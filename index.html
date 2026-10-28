@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Perpustakaan Media</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eef1f4; --surface:#fff; --ink:#14202b; --muted:#5b6b7a;
+  --line:#d5dce3; --accent:#2f5bff; --accent-ink:#fff; --stage:#0d141b; --err:#b3261e;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#0f161d; --surface:#18222c; --ink:#e8eef4; --muted:#93a3b3;
+    --line:#2a3744; --accent:#6f8dff; --accent-ink:#0f161d; --stage:#05090d; --err:#ff8a80; }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:400 1rem/1.55 "Source Sans 3",system-ui,sans-serif;
+  padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+[hidden]{display:none!important}
+.wrap{max-width:1180px;margin:0 auto;padding:clamp(16px,4vw,40px)}
+h1{font:800 clamp(2rem,6vw,3.6rem)/1.02 "Bricolage Grotesque",system-ui,sans-serif;letter-spacing:-.03em;margin:0 0 .35em}
+.sub{color:var(--muted);margin:0 0 24px;max-width:52ch}
+button,input{font:inherit}
+.btn{background:var(--accent);color:var(--accent-ink);border:0;border-radius:6px;padding:10px 18px;font-weight:600;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+/* gate */
+.gate{min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:24px}
+.gate form{width:100%;max-width:420px}
+.gate input{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);margin:6px 0 14px}
+.gate label{font-weight:600}
+.hint{color:var(--muted);font-size:.9rem;margin:0 0 14px}
+.err{color:var(--err);font-weight:600;min-height:1.4em;margin:8px 0 0}
+
+/* top bar */
+.bar{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:20px}
+.who{color:var(--muted)}
+.who b{color:var(--ink)}
+
+/* upload */
+.upload{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:16px;margin-bottom:24px}
+.upload h2{font:700 1.15rem/1.2 "Bricolage Grotesque",sans-serif;margin:0 0 10px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.row input[type=file]{flex:1 1 220px;min-width:0}
+progress{width:100%;height:10px;margin-top:12px;accent-color:var(--accent)}
+
+/* player */
+.layout{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:clamp(16px,3vw,32px);align-items:start}
+@media (max-width:860px){.layout{grid-template-columns:1fr}}
+.stage{background:var(--stage);border-radius:6px;overflow:hidden}
+.stage video{display:block;width:100%;aspect-ratio:16/9;background:var(--stage)}
+.stage.is-audio video{aspect-ratio:auto;height:54px}
+.cover{display:none;aspect-ratio:16/9;place-items:center;color:#fff;padding:24px;text-align:center;
+  font:800 clamp(1.3rem,4vw,2.2rem)/1.1 "Bricolage Grotesque",sans-serif;background:linear-gradient(135deg,#17306b,#2f5bff);word-break:break-word}
+.stage.is-audio .cover{display:grid}
+.now h2{font:700 1.4rem/1.2 "Bricolage Grotesque",sans-serif;margin:14px 0 0;word-break:break-word}
+.now p{margin:.25em 0 0;color:var(--muted)}
+
+.list{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:6px;max-height:70vh;overflow:auto}
+.list li+li{border-top:1px solid var(--line)}
+.list button{all:unset;box-sizing:border-box;width:100%;cursor:pointer;display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:12px 16px}
+.list button:hover{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.list button:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
+.list [aria-current="true"]{background:var(--accent);color:var(--accent-ink)}
+.list [aria-current="true"] small{color:inherit}
+.ttl{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+small{color:var(--muted)}
+.size{font-size:.8rem;color:var(--muted);white-space:nowrap}
+.list [aria-current="true"] .size{color:inherit}
+.empty{padding:20px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<!-- Halaman pertama: masukkan username -->
+<main class="gate" id="gate" hidden>
+  <form id="gateForm" autocomplete="off">
+    <h1 id="gateTitle"></h1>
+    <p class="sub" id="gateSub"></p>
+    <label for="username">Username</label>
+    <input id="username" name="username" type="text" minlength="2" maxlength="30" required
+           pattern="[A-Za-z0-9_\-]{2,30}" autocapitalize="none" spellcheck="false" placeholder="mis. budi_01">
+    <p class="hint">2-30 karakter: huruf, angka, _ atau -</p>
+    <button class="btn" type="submit">Masuk</button>
+    <p class="err" id="gateErr" role="alert"></p>
+  </form>
+</main>
+
+<!-- Halaman utama -->
+<div class="wrap" id="app" hidden>
+  <div class="bar">
+    <h1 id="title" style="margin:0;font-size:clamp(1.6rem,4vw,2.4rem)"></h1>
+    <div class="who">Masuk sebagai <b id="who"></b> <button class="btn ghost" id="logout" type="button">Ganti</button></div>
+  </div>
+
+  <section class="upload" aria-label="Upload">
+    <h2>Upload video atau audio</h2>
+    <div class="row">
+      <input id="file" type="file" accept="video/*,audio/*">
+      <button class="btn" id="uploadBtn" type="button">Upload</button>
+    </div>
+    <progress id="prog" value="0" max="100" hidden></progress>
+    <p class="err" id="upErr" role="alert"></p>
+    <p class="hint" id="upOk" style="margin:6px 0 0"></p>
+  </section>
+
+  <div class="layout">
+    <section aria-label="Pemutar">
+      <div class="stage" id="stage">
+        <div class="cover" id="cover"></div>
+        <video id="player" controls playsinline preload="metadata"></video>
+      </div>
+      <div class="now">
+        <h2 id="nowTitle">Pilih media untuk diputar</h2>
+        <p id="nowNote"></p>
+      </div>
+      <p class="err" id="plErr" role="alert"></p>
+    </section>
+    <ul class="list" id="list" aria-label="Daftar media"></ul>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script>
+(function(){
+  const cfg = window.SITE || {};
+  const $ = id => document.getElementById(id);
+  const KEY = "media_username";
+  const NAME_RE = /^[A-Za-z0-9_-]{2,30}$/;
+  let username = "", items = [], current = -1, hls = null;
+
+  const store = {
+    get(){ try{ return localStorage.getItem(KEY) || ""; }catch(e){ return ""; } },
+    set(v){ try{ localStorage.setItem(KEY, v); }catch(e){} },
+    del(){ try{ localStorage.removeItem(KEY); }catch(e){} }
+  };
+
+  document.title = cfg.title || "Media";
+  $("gateTitle").textContent = cfg.title || "Media";
+  $("gateSub").textContent = cfg.subtitle || "";
+  $("title").textContent = cfg.title || "Media";
+
+  /* ---------- gate ---------- */
+  function showGate(){ $("app").hidden = true; $("gate").hidden = false; $("username").focus(); }
+  function showApp(){
+    $("gate").hidden = true; $("app").hidden = false;
+    $("who").textContent = username;
+    loadList();
+  }
+  $("gateForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const v = $("username").value.trim();
+    if (!NAME_RE.test(v)){ $("gateErr").textContent = "Username harus 2-30 karakter: huruf, angka, _ atau -"; return; }
+    username = v; store.set(v); $("gateErr").textContent = ""; showApp();
+  });
+  $("logout").addEventListener("click", () => {
+    store.del(); username = ""; $("username").value = "";
+    $("player").pause(); showGate();
+  });
+
+  /* ---------- list & player ---------- */
+  const fmtSize = b => b >= 1073741824 ? (b/1073741824).toFixed(1)+" GB" : b >= 1048576 ? (b/1048576).toFixed(1)+" MB" : Math.max(1,Math.round(b/1024))+" KB";
+
+  async function loadList(){
+    const list = $("list");
+    list.innerHTML = '<li class="empty">Memuat daftar...</li>';
+    try{
+      const r = await fetch("/api/list");
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Gagal memuat daftar");
+      items = d.items;
+    }catch(e){
+      items = []; list.innerHTML = "";
+      const li = document.createElement("li"); li.className = "empty"; li.textContent = e.message; list.appendChild(li);
+      return;
+    }
+    renderList();
+  }
+
+  function renderList(){
+    const list = $("list"); list.innerHTML = "";
+    if (!items.length){
+      const li = document.createElement("li"); li.className = "empty"; li.textContent = "Belum ada media. Upload file pertamamu di atas.";
+      list.appendChild(li); return;
+    }
+    items.forEach((it, i) => {
+      const li = document.createElement("li"), b = document.createElement("button");
+      b.type = "button";
+      const left = document.createElement("span");
+      const t = document.createElement("span"); t.className = "ttl"; t.textContent = it.title;
+      const u = document.createElement("small"); u.textContent = "oleh " + it.uploader;
+      left.append(t, u);
+      const s = document.createElement("span"); s.className = "size"; s.textContent = fmtSize(it.size);
+      b.append(left, s);
+      b.addEventListener("click", () => play(i, true));
+      li.appendChild(b); list.appendChild(li);
+    });
+    if (current < 0 || current >= items.length) play(0, false);
+    else mark();
+  }
+
+  function mark(){ document.querySelectorAll("#list button").forEach((b,k)=>b.setAttribute("aria-current", k===current)); }
+
+  function loadHls(){
+    return new Promise((ok, no) => {
+      if (window.Hls) return ok();
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js";
+      s.onload = ok; s.onerror = no; document.head.appendChild(s);
+    });
+  }
+  async function attach(src){
+    const p = $("player");
+    if (hls){ hls.destroy(); hls = null; }
+    if (/\.m3u8(\?|$)/i.test(src) && !p.canPlayType("application/vnd.apple.mpegurl")){
+      await loadHls();
+      if (window.Hls && Hls.isSupported()){ hls = new Hls(); hls.loadSource(src); hls.attachMedia(p); return; }
+    }
+    p.src = src;
+  }
+  async function play(i, auto){
+    const it = items[i]; if (!it) return;
+    current = i; $("plErr").textContent = "";
+    $("stage").classList.toggle("is-audio", it.type === "audio");
+    $("cover").textContent = it.title;
+    $("nowTitle").textContent = it.title;
+    $("nowNote").textContent = "Diupload oleh " + it.uploader;
+    mark();
+    await attach(it.url);
+    if (auto) $("player").play().catch(()=>{});
+  }
+  $("player").addEventListener("error", () => {
+    $("plErr").textContent = "Media tidak bisa dimuat. Periksa domain publik R2 dan pengaturan CORS.";
+  });
+  $("player").addEventListener("ended", () => { if (current + 1 < items.length) play(current + 1, true); });
+
+  /* ---------- upload ---------- */
+  $("uploadBtn").addEventListener("click", async () => {
+    const f = $("file").files[0], err = $("upErr"), ok = $("upOk"), prog = $("prog"), btn = $("uploadBtn");
+    err.textContent = ""; ok.textContent = "";
+    if (!f){ err.textContent = "Pilih file dulu."; return; }
+    const type = f.type || (/\.(mp4|m4v|mov)$/i.test(f.name) ? "video/mp4" : /\.mp3$/i.test(f.name) ? "audio/mpeg" : "");
+    if (!/^(video|audio)\//.test(type)){ err.textContent = "Hanya file video atau audio."; return; }
+    const max = (cfg.maxUploadMB || 2048) * 1048576;
+    if (f.size > max){ err.textContent = "File terlalu besar (maks " + (cfg.maxUploadMB || 2048) + " MB)."; return; }
+
+    btn.disabled = true; prog.hidden = false; prog.value = 0;
+    try{
+      const r = await fetch("/api/presign", {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ username, filename: f.name, contentType: type, size: f.size })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Gagal memulai upload");
+
+      await new Promise((resolve, reject) => {
+        const x = new XMLHttpRequest();
+        x.open("PUT", d.uploadUrl);
+        x.setRequestHeader("Content-Type", type);
+        x.upload.onprogress = e => { if (e.lengthComputable) prog.value = Math.round(e.loaded / e.total * 100); };
+        x.onload = () => x.status >= 200 && x.status < 300 ? resolve() : reject(new Error("Upload ditolak R2 (kode " + x.status + ")"));
+        x.onerror = () => reject(new Error("Upload gagal. Periksa CORS R2: method PUT dan header Content-Type harus diizinkan."));
+        x.send(f);
+      });
+      ok.textContent = "Upload selesai: " + f.name;
+      $("file").value = "";
+      await loadList();
+    }catch(e){
+      err.textContent = e.message;
+    }finally{
+      btn.disabled = false; prog.hidden = true;
+    }
+  });
+
+  /* ---------- start ---------- */
+  const saved = store.get();
+  if (NAME_RE.test(saved)){ username = saved; showApp(); } else showGate();
+})();
+</script>
+</body>
+</html>
