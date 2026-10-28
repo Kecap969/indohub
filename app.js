@@ -81,7 +81,7 @@
   function renderList(){
     const list = $("list"); list.innerHTML = "";
     if (!items.length){
-      const li = document.createElement("li"); li.className = "empty"; li.textContent = "Belum ada media. Upload file pertamamu di atas.";
+      const li = document.createElement("li"); li.className = "empty"; li.textContent = "Belum ada media.";
       list.appendChild(li); return;
     }
     items.forEach((it, i) => {
@@ -89,8 +89,7 @@
       b.type = "button";
       const left = document.createElement("span");
       const t = document.createElement("span"); t.className = "ttl"; t.textContent = it.title;
-      const u = document.createElement("small"); u.textContent = "oleh " + it.uploader;
-      left.append(t, u);
+      left.append(t);
       const s = document.createElement("span"); s.className = "size"; s.textContent = fmtSize(it.size);
       b.append(left, s);
       b.addEventListener("click", () => play(i, true));
@@ -124,7 +123,6 @@
     $("stage").classList.toggle("is-audio", it.type === "audio");
     $("cover").textContent = it.title;
     $("nowTitle").textContent = it.title;
-    $("nowNote").textContent = "Diupload oleh " + it.uploader;
     mark();
     await attach(it.url);
     if (auto) $("player").play().catch(()=>{});
@@ -146,10 +144,11 @@
     btn.disabled = true; prog.hidden = false; prog.value = 0;
     try{
       const r = await fetch("/api/presign", {
-        method: "POST", headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ username, filename: f.name, contentType: type, size: f.size })
+        method: "POST", headers: {"Content-Type":"application/json","Authorization":"Bearer "+token},
+        body: JSON.stringify({ filename: f.name, contentType: type, size: f.size })
       });
       const d = await r.json();
+      if (r.status === 401){ adminExpired(); return; }
       if (!r.ok) throw new Error(d.error || "Gagal memulai upload");
 
       await new Promise((resolve, reject) => {
@@ -163,7 +162,7 @@
       });
       ok.textContent = "Upload selesai: " + f.name;
       $("file").value = "";
-      await loadList();
+      await loadAdmin();
     }catch(e){
       err.textContent = e.message;
     }finally{

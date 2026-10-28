@@ -36,17 +36,6 @@
     <div class="who">Masuk sebagai <b id="who"></b> <button class="btn ghost" id="logout" type="button">Ganti</button></div>
   </div>
 
-  <section class="upload" aria-label="Upload">
-    <h2>Upload video atau audio</h2>
-    <div class="row">
-      <input id="file" type="file" accept="video/*,audio/*">
-      <button class="btn" id="uploadBtn" type="button">Upload</button>
-    </div>
-    <progress id="prog" value="0" max="100" hidden></progress>
-    <p class="err" id="upErr" role="alert"></p>
-    <p class="hint" id="upOk" style="margin:6px 0 0"></p>
-  </section>
-
   <div class="layout">
     <section aria-label="Pemutar">
       <div class="stage" id="stage">
@@ -70,6 +59,16 @@
       <h1>Kelola media</h1>
       <button class="btn ghost" id="aOut" type="button">Keluar</button>
     </div>
+    <section class="upload" aria-label="Upload">
+      <h2>Upload video atau audio</h2>
+      <div class="row">
+        <input id="file" type="file" accept="video/*,audio/*">
+        <button class="btn" id="uploadBtn" type="button">Upload</button>
+      </div>
+      <progress id="prog" value="0" max="100" hidden></progress>
+      <p class="err" id="upErr" role="alert"></p>
+      <p class="hint" id="upOk" style="margin:6px 0 0"></p>
+    </section>
     <div class="stats">
       <div><b id="sCount">0</b><span class="hint">file</span></div>
       <div><b id="sSize">0</b><span class="hint">total ukuran</span></div>
