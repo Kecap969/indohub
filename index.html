@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Perpustakaan Media</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- 1. Halaman masuk (user biasa atau admin) -->
+<main class="gate" id="gate" hidden>
+  <form id="gateForm" autocomplete="off">
+    <h1 id="gateTitle"></h1>
+    <p class="sub" id="gateSub"></p>
+    <label for="username">Username</label>
+    <input id="username" type="text" minlength="2" maxlength="30" required
+           pattern="[A-Za-z0-9_\-]{2,30}" autocapitalize="none" spellcheck="false" placeholder="mis. budi_01">
+    <div id="pwBox" hidden>
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password">
+    </div>
+    <p class="hint">2-30 karakter: huruf, angka, _ atau -</p>
+    <button class="btn" id="gateBtn" type="submit">Masuk</button>
+    <p class="err" id="gateErr" role="alert"></p>
+  </form>
+</main>
+
+<!-- 2. Halaman media (user biasa) -->
+<div class="wrap" id="app" hidden>
+  <div class="bar">
+    <h1 id="title"></h1>
+    <div class="who">Masuk sebagai <b id="who"></b> <button class="btn ghost" id="logout" type="button">Ganti</button></div>
+  </div>
+
+  <section class="upload" aria-label="Upload">
+    <h2>Upload video atau audio</h2>
+    <div class="row">
+      <input id="file" type="file" accept="video/*,audio/*">
+      <button class="btn" id="uploadBtn" type="button">Upload</button>
+    </div>
+    <progress id="prog" value="0" max="100" hidden></progress>
+    <p class="err" id="upErr" role="alert"></p>
+    <p class="hint" id="upOk" style="margin:6px 0 0"></p>
+  </section>
+
+  <div class="layout">
+    <section aria-label="Pemutar">
+      <div class="stage" id="stage">
+        <div class="cover" id="cover"></div>
+        <video id="player" controls playsinline preload="metadata"></video>
+      </div>
+      <div class="now">
+        <h2 id="nowTitle">Pilih media untuk diputar</h2>
+        <p id="nowNote"></p>
+      </div>
+      <p class="err" id="plErr" role="alert"></p>
+    </section>
+    <ul class="list" id="list" aria-label="Daftar media"></ul>
+  </div>
+</div>
+
+<!-- 3. Dashboard admin (tanpa form login; masuk lewat halaman 1) -->
+<div id="admin" hidden>
+  <div class="wrap">
+    <div class="bar">
+      <h1>Kelola media</h1>
+      <button class="btn ghost" id="aOut" type="button">Keluar</button>
+    </div>
+    <div class="stats">
+      <div><b id="sCount">0</b><span class="hint">file</span></div>
+      <div><b id="sSize">0</b><span class="hint">total ukuran</span></div>
+    </div>
+    <div class="tools">
+      <input type="search" id="q" placeholder="Cari nama file atau uploader">
+      <label><input type="checkbox" id="all"> Pilih semua</label>
+      <button class="btn danger" id="del" type="button" disabled>Hapus terpilih</button>
+    </div>
+    <p class="err" id="aerr" role="alert"></p>
+    <ul class="alist" id="alist"></ul>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
