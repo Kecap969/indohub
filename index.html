@@ -30,26 +30,65 @@
 </main>
 
 <!-- 2. Halaman media (user biasa) -->
-<div class="wrap" id="app" hidden>
-  <div class="bar">
+<div id="app" hidden>
+  <header class="topbar">
     <h1 id="title"></h1>
-    <div class="who">Masuk sebagai <b id="who"></b> <button class="btn ghost" id="logout" type="button">Ganti</button></div>
-  </div>
+  </header>
 
-  <div class="layout">
-    <section aria-label="Pemutar">
-      <div class="stage" id="stage">
-        <div class="cover" id="cover"></div>
-        <video id="player" controls playsinline preload="metadata"></video>
+  <main class="wrap">
+    <!-- Home -->
+    <section class="tab" id="tab-home" aria-label="Home">
+      <div class="layout">
+        <section aria-label="Pemutar" class="playcol">
+          <div class="stage" id="stage">
+            <div class="cover" id="cover"></div>
+            <video id="player" controls playsinline preload="metadata"></video>
+          </div>
+          <div class="now">
+            <h2 id="nowTitle">Pilih media untuk diputar</h2>
+            <p id="nowNote"></p>
+          </div>
+          <p class="err" id="plErr" role="alert"></p>
+        </section>
+        <div>
+          <h3 class="sec">Daftar media</h3>
+          <ul class="list" id="list" aria-label="Daftar media"></ul>
+        </div>
       </div>
-      <div class="now">
-        <h2 id="nowTitle">Pilih media untuk diputar</h2>
-        <p id="nowNote"></p>
-      </div>
-      <p class="err" id="plErr" role="alert"></p>
     </section>
-    <ul class="list" id="list" aria-label="Daftar media"></ul>
-  </div>
+
+    <!-- Premium -->
+    <section class="tab" id="tab-premium" aria-label="Premium" hidden>
+      <div class="card hero">
+        <div class="badge-ic"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5L3 8z"/></svg></div>
+        <h2>Premium</h2>
+        <p>Fitur Premium segera hadir. Kami akan memberi tahu lewat menu Notifikasi saat sudah tersedia.</p>
+      </div>
+    </section>
+
+    <!-- Notifikasi -->
+    <section class="tab" id="tab-notif" aria-label="Notifikasi" hidden>
+      <h2 class="tabttl">Notifikasi</h2>
+      <ul class="notifs" id="notifs"></ul>
+    </section>
+
+    <!-- Profil -->
+    <section class="tab" id="tab-profil" aria-label="Profil" hidden>
+      <div class="card profile">
+        <div class="avatar" id="avatar" aria-hidden="true"></div>
+        <h2 id="who"></h2>
+        <p class="hint" id="mediaCount"></p>
+        <button class="btn ghost" id="logout" type="button">Ganti username</button>
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottomnav" aria-label="Navigasi utama">
+    <button type="button" data-tab="home" aria-current="page"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg><span>Home</span></button>
+    <button type="button" data-tab="premium"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5L3 8z"/></svg><span>Premium</span></button>
+    <button type="button" data-tab="notif"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15L6 16z"/><path d="M10 21h4"/></svg><span>Notifikasi</span><i class="dot" id="notifDot" hidden></i></button>
+    <button type="button" data-tab="profil"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg><span>Profil</span></button>
+  </nav>
 </div>
 
 <!-- 3. Dashboard admin (tanpa form login; masuk lewat halaman 1) -->

@@ -25,8 +25,59 @@
     $("admin").hidden = name !== "admin";
   }
   function showGate(){ $("player").pause(); view("gate"); $("username").focus(); }
-  function showApp(){ $("who").textContent = username; view("app"); loadList(); }
+  function showApp(){
+    $("who").textContent = username; $("avatar").textContent = username.charAt(0);
+    view("app"); setTab("home"); loadList();
+  }
   function showAdmin(){ view("admin"); loadAdmin(); }
+
+  /* ---------- tab & notifikasi (halaman pengguna) ---------- */
+  const SEEN_KEY = "media_seen";
+  const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+  const ICON_AUDIO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>';
+  const ICON_BELL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15L6 16z"/><path d="M10 21h4"/></svg>';
+  const TABS = ["home","premium","notif","profil"];
+  let tab = "home";
+  const seen = () => Number(ls.get(SEEN_KEY)) || 0;
+  const ts = it => new Date(it.lastModified).getTime();
+  function setTab(name){
+    tab = name;
+    TABS.forEach(t => $("tab-" + t).hidden = t !== name);
+    document.querySelectorAll(".bottomnav button").forEach(b => { if (b.dataset.tab === name) b.setAttribute("aria-current","page"); else b.removeAttribute("aria-current"); });
+    if (name === "notif"){ renderNotifs(); if (items.length) ls.set(SEEN_KEY, String(Math.max(...items.map(ts)))); updateDot(); }
+    window.scrollTo(0, 0);
+  }
+  document.querySelectorAll(".bottomnav button").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
+  function relTime(d){
+    const s = Math.max(0, (Date.now() - new Date(d).getTime()) / 1000);
+    if (s < 60) return "baru saja";
+    if (s < 3600) return Math.floor(s/60) + " menit lalu";
+    if (s < 86400) return Math.floor(s/3600) + " jam lalu";
+    if (s < 604800) return Math.floor(s/86400) + " hari lalu";
+    return new Date(d).toLocaleDateString("id-ID", { day:"numeric", month:"short", year:"numeric" });
+  }
+  function updateDot(){
+    if (!items.length) { $("notifDot").hidden = true; return; }
+    if (!ls.get(SEEN_KEY)) ls.set(SEEN_KEY, String(Math.max(...items.map(ts)))); // kunjungan pertama: anggap sudah dilihat
+    const n = items.filter(it => ts(it) > seen()).length;
+    $("notifDot").hidden = !n || tab === "notif"; $("notifDot").textContent = n > 9 ? "9+" : n;
+  }
+  function renderNotifs(){
+    const ul = $("notifs"); ul.innerHTML = "";
+    if (!items.length){
+      const li = document.createElement("li"); li.className = "empty"; li.textContent = "Belum ada notifikasi.";
+      ul.appendChild(li); return;
+    }
+    const last = seen();
+    items.slice(0, 20).forEach(it => {
+      const li = document.createElement("li"); if (ts(it) > last) li.className = "new";
+      const ic = document.createElement("span"); ic.className = "ic"; ic.innerHTML = ICON_BELL;
+      const box = document.createElement("div");
+      const b = document.createElement("b"); b.textContent = "Media baru: " + it.title;
+      const sm = document.createElement("small"); sm.textContent = relTime(it.lastModified);
+      box.append(b, sm); li.append(ic, box); ul.appendChild(li);
+    });
+  }
 
   /* ---------- gate ---------- */
   function togglePw(focus){
@@ -76,7 +127,8 @@
       const li = document.createElement("li"); li.className = "empty"; li.textContent = e.message; list.appendChild(li);
       return;
     }
-    renderList();
+    renderList(); updateDot();
+    $("mediaCount").textContent = items.length + " media tersedia";
   }
   function renderList(){
     const list = $("list"); list.innerHTML = "";
@@ -87,11 +139,13 @@
     items.forEach((it, i) => {
       const li = document.createElement("li"), b = document.createElement("button");
       b.type = "button";
+      const th = document.createElement("span"); th.className = "thumb"; th.innerHTML = it.type === "audio" ? ICON_AUDIO : ICON_PLAY;
       const left = document.createElement("span");
       const t = document.createElement("span"); t.className = "ttl"; t.textContent = it.title;
-      left.append(t);
+      const kind = document.createElement("small"); kind.textContent = it.type === "audio" ? "Audio" : "Video";
+      left.append(t, kind);
       const s = document.createElement("span"); s.className = "size"; s.textContent = fmtSize(it.size);
-      b.append(left, s);
+      b.append(th, left, s);
       b.addEventListener("click", () => play(i, true));
       li.appendChild(b); list.appendChild(li);
     });
