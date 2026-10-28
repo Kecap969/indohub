@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef1f4;--surface:#fff;--ink:#14202b;--muted:#5b6b7a;--line:#d5dce3;--accent:#2f5bff;--accent-ink:#fff;--danger:#b3261e}
+@media (prefers-color-scheme: dark){:root{--bg:#0f161d;--surface:#18222c;--ink:#e8eef4;--muted:#93a3b3;--line:#2a3744;--accent:#6f8dff;--accent-ink:#0f161d;--danger:#ff8a80}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:400 1rem/1.55 "Source Sans 3",system-ui,sans-serif;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+[hidden]{display:none!important}
+h1{font:800 clamp(1.8rem,5vw,2.6rem)/1.05 "Bricolage Grotesque",system-ui,sans-serif;letter-spacing:-.03em;margin:0}
+button,input{font:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.btn{background:var(--accent);color:var(--accent-ink);border:0;border-radius:6px;padding:10px 18px;font-weight:600;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.danger{background:var(--danger);color:#fff}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.err{color:var(--danger);font-weight:600;min-height:1.4em;margin:8px 0 0}
+.hint{color:var(--muted);margin:0}
+
+.gate{min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:24px}
+.gate form{width:100%;max-width:400px}
+.gate label{font-weight:600;display:block;margin-top:16px}
+.gate input{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);margin:6px 0 0}
+.gate .btn{margin-top:18px}
+
+.wrap{max-width:1000px;margin:0 auto;padding:clamp(16px,4vw,40px)}
+.bar{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:20px}
+.stats{display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px}
+.stats div{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 18px}
+.stats b{display:block;font:800 1.6rem/1.1 "Bricolage Grotesque",sans-serif}
+.tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.tools input[type=search]{flex:1 1 200px;padding:10px 12px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink)}
+.list{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:6px}
+.list li{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:12px 16px}
+.list li+li{border-top:1px solid var(--line)}
+.list input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent)}
+.name{font-weight:600;word-break:break-all}
+.meta{color:var(--muted);font-size:.88rem}
+.acts{display:flex;gap:8px}
+.acts a,.acts button{font-size:.9rem;padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--ink);cursor:pointer;text-decoration:none}
+.empty{padding:20px;color:var(--muted)}
+@media (max-width:560px){.list li{grid-template-columns:auto 1fr}.acts{grid-column:2}}
+</style>
+</head>
+<body>
+
+<main class="gate" id="gate">
+  <form id="form" autocomplete="off">
+    <h1>Admin</h1>
+    <p class="hint" style="margin-top:8px">Halaman khusus pengelola.</p>
+    <label for="u">Username</label>
+    <input id="u" type="text" autocapitalize="none" spellcheck="false" required>
+    <div id="pwBox" hidden>
+      <label for="p">Password</label>
+      <input id="p" type="password" autocomplete="current-password">
+    </div>
+    <button class="btn" id="go" type="submit">Masuk</button>
+    <p class="err" id="gerr" role="alert"></p>
+  </form>
+</main>
+
+<div class="wrap" id="app" hidden>
+  <div class="bar">
+    <h1>Kelola media</h1>
+    <div><a class="btn ghost" href="/" style="text-decoration:none;display:inline-block">Ke situs</a> <button class="btn ghost" id="out" type="button">Keluar</button></div>
+  </div>
+  <div class="stats">
+    <div><b id="sCount">0</b><span class="hint">file</span></div>
+    <div><b id="sSize">0</b><span class="hint">total ukuran</span></div>
+  </div>
+  <div class="tools">
+    <input type="search" id="q" placeholder="Cari nama file atau uploader">
+    <label><input type="checkbox" id="all"> Pilih semua</label>
+    <button class="btn danger" id="del" type="button" disabled>Hapus terpilih</button>
+  </div>
+  <p class="err" id="aerr" role="alert"></p>
+  <ul class="list" id="list"></ul>
+</div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const TK = "admin_token";
+  let items = [], shown = [], token = "";
+  const tget = () => { try{ return sessionStorage.getItem(TK) || ""; }catch(e){ return ""; } };
+  const tset = v => { try{ v ? sessionStorage.setItem(TK, v) : sessionStorage.removeItem(TK); }catch(e){} };
+  const fmt = b => b >= 1073741824 ? (b/1073741824).toFixed(2)+" GB" : b >= 1048576 ? (b/1048576).toFixed(1)+" MB" : Math.max(0,Math.round(b/1024))+" KB";
+
+  function showGate(){ $("app").hidden = true; $("gate").hidden = false; $("pwBox").hidden = true; $("p").value = ""; $("u").focus(); }
+  function showApp(){ $("gate").hidden = true; $("app").hidden = false; load(); }
+
+  /* login: username dulu, kalau "kecap" otomatis minta password */
+  $("form").addEventListener("submit", async e => {
+    e.preventDefault();
+    const u = $("u").value.trim(), err = $("gerr");
+    err.textContent = "";
+    if (u.toLowerCase() !== "kecap"){ err.textContent = "Username tidak dikenali."; return; }
+    if ($("pwBox").hidden){ $("pwBox").hidden = false; $("p").required = true; $("p").focus(); return; }
+    const btn = $("go"); btn.disabled = true;
+    try{
+      const r = await fetch("/api/admin-login", { method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ username: u, password: $("p").value }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Gagal masuk");
+      token = d.token; tset(token); showApp();
+    }catch(ex){ err.textContent = ex.message; $("p").select(); }
+    finally{ btn.disabled = false; }
+  });
+  $("u").addEventListener("input", () => { if ($("u").value.trim().toLowerCase() !== "kecap"){ $("pwBox").hidden = true; $("p").required = false; } });
+  $("out").addEventListener("click", () => { tset(""); token = ""; showGate(); });
+
+  /* daftar */
+  async function load(){
+    $("aerr").textContent = "";
+    try{
+      const r = await fetch("/api/list"); const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Gagal memuat");
+      items = d.items;
+    }catch(ex){ items = []; $("aerr").textContent = ex.message; }
+    render();
+  }
+  function render(){
+    const q = $("q").value.trim().toLowerCase();
+    shown = items.filter(i => !q || i.title.toLowerCase().includes(q) || i.uploader.toLowerCase().includes(q));
+    $("sCount").textContent = items.length;
+    $("sSize").textContent = fmt(items.reduce((a,i)=>a+i.size,0));
+    const ul = $("list"); ul.innerHTML = "";
+    $("all").checked = false;
+    if (!shown.length){ const li = document.createElement("li"); li.className = "empty"; li.style.display = "block"; li.textContent = "Tidak ada file."; ul.appendChild(li); sync(); return; }
+    shown.forEach(it => {
+      const li = document.createElement("li");
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.dataset.key = it.key; cb.setAttribute("aria-label","Pilih "+it.title);
+      cb.addEventListener("change", sync);
+      const mid = document.createElement("div");
+      const n = document.createElement("div"); n.className = "name"; n.textContent = it.title;
+      const m = document.createElement("div"); m.className = "meta";
+      m.textContent = it.uploader + " · " + fmt(it.size) + " · " + new Date(it.lastModified).toLocaleString("id-ID");
+      mid.append(n, m);
+      const a = document.createElement("div"); a.className = "acts";
+      const open = document.createElement("a"); open.href = it.url; open.target = "_blank"; open.rel = "noopener"; open.textContent = "Buka";
+      const cp = document.createElement("button"); cp.type = "button"; cp.textContent = "Salin link";
+      cp.addEventListener("click", async () => { try{ await navigator.clipboard.writeText(it.url); cp.textContent = "Tersalin"; setTimeout(()=>cp.textContent="Salin link",1500); }catch(e){ prompt("Salin link:", it.url); } });
+      a.append(open, cp);
+      li.append(cb, mid, a); ul.appendChild(li);
+    });
+    sync();
+  }
+  const checks = () => [...document.querySelectorAll("#list input[type=checkbox]")];
+  function sync(){ const n = checks().filter(c=>c.checked).length; $("del").disabled = !n; $("del").textContent = n ? "Hapus terpilih ("+n+")" : "Hapus terpilih"; }
+  $("all").addEventListener("change", e => { checks().forEach(c => c.checked = e.target.checked); sync(); });
+  $("q").addEventListener("input", render);
+
+  $("del").addEventListener("click", async () => {
+    const keys = checks().filter(c=>c.checked).map(c=>c.dataset.key);
+    if (!keys.length) return;
+    if (!confirm("Hapus "+keys.length+" file secara permanen? Tindakan ini tidak bisa dibatalkan.")) return;
+    $("del").disabled = true; $("aerr").textContent = "";
+    try{
+      const r = await fetch("/api/admin-delete", { method:"POST",
+        headers:{"Content-Type":"application/json","Authorization":"Bearer "+token}, body: JSON.stringify({ keys }) });
+      const d = await r.json();
+      if (r.status === 401){ tset(""); token = ""; showGate(); $("gerr").textContent = d.error; return; }
+      if (!r.ok) throw new Error(d.error || "Gagal menghapus");
+      await load();
+    }catch(ex){ $("aerr").textContent = ex.message; sync(); }
+  });
+
+  token = tget();
+  if (token) showApp(); else showGate();
+})();
+</script>
+</body>
+</html>

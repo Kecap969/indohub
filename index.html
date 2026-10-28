@@ -157,6 +157,7 @@ small{color:var(--muted)}
     e.preventDefault();
     const v = $("username").value.trim();
     if (!NAME_RE.test(v)){ $("gateErr").textContent = "Username harus 2-30 karakter: huruf, angka, _ atau -"; return; }
+    if (v.toLowerCase() === "kecap"){ $("gateErr").textContent = "Username ini khusus admin. Gunakan username lain."; return; }
     username = v; store.set(v); $("gateErr").textContent = ""; showApp();
   });
   $("logout").addEventListener("click", () => {

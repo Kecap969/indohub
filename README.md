@@ -11,6 +11,8 @@ Kunci R2 hanya dipakai di server (folder `api/`), tidak pernah dikirim ke browse
 | R2_SECRET_ACCESS_KEY | Secret Access Key token R2 |
 | R2_BUCKET | Nama bucket |
 | R2_PUBLIC_URL | Domain publik bucket, mis. https://media.domainmu.com |
+| ADMIN_PASSWORD | Password untuk halaman /admin (username: kecap) |
+| ADMIN_USERNAME | (opsional) ganti username admin, default `kecap` |
 
 Setelah mengisi/ubah variable, lakukan **Redeploy**.
 
