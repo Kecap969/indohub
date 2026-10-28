@@ -2,7 +2,7 @@
   const $ = id => document.getElementById(id);
   const NAME_KEY = "media_username", TOKEN_KEY = "admin_token", SEEN_KEY = "media_seen";
   const NAME_RE = /^[A-Za-z0-9_-]{2,30}$/;
-  let cfg = { title:"Perpustakaan Media", subtitle:"", maxUploadMB:2048, adminUser:"kecap" };
+  let cfg = { title:"Indohub", subtitle:"", maxUploadMB:2048, adminUser:"kecap" };
   let username = "", items = [], token = "", hls = null;
   let tab = "home", openAlbum = null, albumItems = [], current = -1;
 
@@ -17,6 +17,7 @@
   const ts = it => new Date(it.lastModified).getTime();
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const CATNAME = { free:"Gratis", premium:"Premium" };
+  const TABTITLE = { home:"Home", premium:"Premium", notif:"Notifikasi", profil:"Profil" };
 
   const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
   const ICON_AUDIO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>';
@@ -55,7 +56,7 @@
   /* ---------- tab bawah ---------- */
   const TABS = ["catalog","notif","profil"];
   function setTab(name){
-    tab = name;
+    tab = name; $("title").textContent = TABTITLE[name];
     const pane = name === "home" || name === "premium" ? "catalog" : name;
     TABS.forEach(t => $("tab-" + t).hidden = t !== pane);
     document.querySelectorAll(".bottomnav button").forEach(b => {
@@ -72,7 +73,7 @@
   function hue(s){ let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return h; }
   function renderAlbums(){
     const cat = tab === "premium" ? "premium" : "free";
-    $("catTitle").textContent = cat === "premium" ? "Premium" : "Gratis";
+    $("catTitle").textContent = cat === "premium" ? "Album premium" : "Album gratis";
     const box = $("albums"); box.innerHTML = "";
     const list = albumsOf(cat);
     if (!list.length){
@@ -369,7 +370,7 @@
   async function start(){
     try{ const r = await fetch("/api/config"); if (r.ok) cfg = Object.assign(cfg, await r.json()); }catch(e){}
     document.title = cfg.title;
-    $("gateTitle").textContent = cfg.title; $("gateSub").textContent = cfg.subtitle; $("title").textContent = cfg.title;
+    $("gateTitle").textContent = cfg.title; $("gateSub").textContent = cfg.subtitle;
 
     token = ss.get(TOKEN_KEY);
     if (token){
