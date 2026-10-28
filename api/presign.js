@@ -1,6 +1,7 @@
 const { PutObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { client, missingEnv, publicBase, bucket } = require("./_r2");
+const { ADMIN_USER } = require("./_auth");
 
 const MAX_MB = 2048; // batas ukuran per file (dicek juga di sisi klien)
 
@@ -14,6 +15,8 @@ module.exports = async (req, res) => {
 
   if (!/^[a-zA-Z0-9_-]{2,30}$/.test(username || ""))
     return res.status(400).json({ error: "Username harus 2-30 karakter: huruf, angka, _ atau -" });
+  if (username.toLowerCase() === ADMIN_USER())
+    return res.status(403).json({ error: "Username ini khusus admin. Gunakan username lain." });
   if (!/^(video|audio)\//.test(contentType || ""))
     return res.status(400).json({ error: "Hanya file video atau audio yang boleh diupload" });
   if (!filename || typeof filename !== "string")
