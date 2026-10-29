@@ -46,7 +46,7 @@
     $("app").hidden = name !== "app";
     $("admin").hidden = name !== "admin";
   }
-  function showGate(){ $("player").pause(); view("gate"); $("username").focus(); }
+  function showGate(){ closePlayer(false); view("gate"); $("username").focus(); }
   function showApp(){
     $("who").textContent = username; $("avatar").textContent = username.charAt(0);
     view("app"); openAlbum = null; setTab("home"); loadItems();
@@ -63,7 +63,7 @@
       if (b.dataset.tab === name) b.setAttribute("aria-current","page"); else b.removeAttribute("aria-current");
     });
     if (pane === "catalog"){ closeAlbum(false); renderAlbums(); }
-    else $("player").pause();
+    else closePlayer(false);
     if (name === "notif"){ renderNotifs(); if (items.length) ls.set(SEEN_KEY, String(Math.max(...items.map(ts)))); updateDot(); }
     window.scrollTo(0, 0);
   }
@@ -89,43 +89,69 @@
     });
   }
 
-  /* ---------- isi album + pemutar ---------- */
+  /* ---------- isi album: grid 2 kolom tanpa judul ---------- */
   function openAlbumView(cat, name, push){
     openAlbum = { cat, name };
     albumItems = items.filter(i => i.category === cat && i.album.toLowerCase() === name.toLowerCase())
                       .sort((a,b) => ts(a) - ts(b));
     $("albumView").hidden = true; $("watchView").hidden = false;
     $("crumb").textContent = CATNAME[cat] + " › " + name;
-    $("listTitle").textContent = name + " · " + albumItems.length + " video";
-    current = -1; renderList();
+    renderList();
     if (push !== false) history.pushState({ album: name }, "");
     window.scrollTo(0, 0);
   }
   function closeAlbum(pop){
     if (!openAlbum) return;
-    openAlbum = null; $("player").pause();
+    closePlayer(false);
+    openAlbum = null;
     $("watchView").hidden = true; $("albumView").hidden = false;
     if (pop && history.state && history.state.album) history.back();
   }
   $("backBtn").addEventListener("click", () => { closeAlbum(true); renderAlbums(); });
-  window.addEventListener("popstate", () => { if (openAlbum){ closeAlbum(false); renderAlbums(); } });
+  let skipPop = false; // history.back() yang kita panggil sendiri tidak boleh menutup album juga
+  window.addEventListener("popstate", () => {
+    if (skipPop){ skipPop = false; return; }
+    if (!$("viewer").hidden){ closePlayer(false); return; }
+    if (openAlbum){ closeAlbum(false); renderAlbums(); }
+  });
+
+  const fmtDur = s => { s = Math.round(s); const m = Math.floor(s/60), r = s % 60; return m >= 60 ? Math.floor(m/60) + ":" + String(m%60).padStart(2,"0") + ":" + String(r).padStart(2,"0") : m + ":" + String(r).padStart(2,"0"); };
+  // thumbnail dimuat hanya saat terlihat di layar (hemat kuota)
+  const thumbObserver = "IntersectionObserver" in window ? new IntersectionObserver(entries => {
+    entries.forEach(en => {
+      if (!en.isIntersecting) return;
+      const v = en.target; thumbObserver.unobserve(v);
+      v.src = v.dataset.src;
+    });
+  }, { rootMargin: "200px" }) : null;
 
   function renderList(){
     const list = $("list"); list.innerHTML = "";
-    if (!albumItems.length){ list.appendChild(el("li", "empty", "Album ini kosong.")); return; }
+    if (!albumItems.length){ const li = el("li", "empty", "Album ini kosong."); li.style.gridColumn = "1/-1"; list.appendChild(li); return; }
     albumItems.forEach((it, i) => {
-      const li = el("li"), b = el("button"); b.type = "button";
-      const th = el("span", "thumb"); th.innerHTML = it.type === "audio" ? ICON_AUDIO : ICON_PLAY;
-      const left = el("span");
-      left.append(el("span", "ttl", it.title), el("small", "", it.type === "audio" ? "Audio" : "Video"));
-      b.append(th, left, el("span", "size", fmtSize(it.size)));
-      b.addEventListener("click", () => play(i, true));
+      const li = el("li"), b = el("button", "tile"); b.type = "button";
+      b.setAttribute("aria-label", "Putar " + it.title);
+      if (it.type === "audio"){
+        b.classList.add("is-audio");
+        const ic = el("span", "tic"); ic.innerHTML = ICON_AUDIO; b.appendChild(ic);
+      } else {
+        const v = document.createElement("video");
+        v.muted = true; v.playsInline = true; v.preload = "metadata"; v.tabIndex = -1; v.setAttribute("aria-hidden", "true");
+        v.dataset.src = it.url + "#t=0.5";
+        v.addEventListener("loadedmetadata", () => { if (isFinite(v.duration)) dur.textContent = fmtDur(v.duration); });
+        b.appendChild(v);
+        if (thumbObserver) thumbObserver.observe(v); else v.src = v.dataset.src;
+      }
+      const play = el("span", "tplay"); play.innerHTML = ICON_PLAY;
+      const num = el("span", "tnum", String(i + 1));
+      const dur = el("span", "tdur", "");
+      b.append(play, num, dur);
+      b.addEventListener("click", () => openPlayer(i));
       li.appendChild(b); list.appendChild(li);
     });
-    play(0, false);
   }
-  function mark(){ document.querySelectorAll("#list button").forEach((b,k)=>b.setAttribute("aria-current", k===current)); }
 
+  /* ---------- pemutar layar penuh ---------- */
   function loadHls(){
     return new Promise((ok, no) => {
       if (window.Hls) return ok();
@@ -143,20 +169,33 @@
     }
     p.src = src;
   }
-  async function play(i, auto){
+  async function playAt(i){
     const it = albumItems[i]; if (!it) return;
     current = i; $("plErr").textContent = "";
-    $("stage").classList.toggle("is-audio", it.type === "audio");
-    $("cover").textContent = it.title;
-    $("nowTitle").textContent = it.title;
-    mark();
+    $("viewer").classList.toggle("is-audio", it.type === "audio");
+    $("cover").innerHTML = it.type === "audio" ? ICON_AUDIO : "";
     await attach(it.url);
-    if (auto) $("player").play().catch(()=>{});
+    $("player").play().catch(()=>{});
   }
+  function openPlayer(i){
+    $("viewer").hidden = false; document.body.classList.add("noscroll");
+    history.pushState({ player: true }, "");
+    playAt(i); $("vclose").focus();
+  }
+  function closePlayer(pop){
+    if ($("viewer").hidden) return;
+    const p = $("player"); p.pause(); p.removeAttribute("src"); p.load();
+    if (hls){ hls.destroy(); hls = null; }
+    $("viewer").hidden = true; document.body.classList.remove("noscroll"); current = -1;
+    if (pop && history.state && history.state.player){ skipPop = true; history.back(); }
+  }
+  $("vclose").addEventListener("click", () => closePlayer(true));
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("viewer").hidden) closePlayer(true); });
   $("player").addEventListener("error", () => {
+    if (!$("player").getAttribute("src") && !hls) return;
     $("plErr").textContent = "Media tidak bisa dimuat. Periksa domain publik R2 dan pengaturan CORS.";
   });
-  $("player").addEventListener("ended", () => { if (current + 1 < albumItems.length) play(current + 1, true); });
+  $("player").addEventListener("ended", () => { if (current + 1 < albumItems.length) playAt(current + 1); });
 
   async function loadItems(){
     $("albums").innerHTML = ""; $("albums").appendChild(el("p", "empty", "Memuat..."));

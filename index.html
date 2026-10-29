@@ -47,23 +47,7 @@
           <button type="button" id="backBtn" class="btn ghost">&larr; Album</button>
           <span id="crumb"></span>
         </nav>
-        <div class="layout">
-          <section aria-label="Pemutar" class="playcol">
-            <div class="stage" id="stage">
-              <div class="cover" id="cover"></div>
-              <video id="player" controls playsinline preload="metadata"></video>
-            </div>
-            <div class="now">
-              <h2 id="nowTitle">Pilih media untuk diputar</h2>
-              <p id="nowNote"></p>
-            </div>
-            <p class="err" id="plErr" role="alert"></p>
-          </section>
-          <div>
-            <h3 class="sec" id="listTitle">Daftar video</h3>
-            <ul class="list" id="list" aria-label="Daftar media"></ul>
-          </div>
-        </div>
+        <ul class="vgrid" id="list" aria-label="Daftar video"></ul>
       </div>
     </section>
 
@@ -82,6 +66,15 @@
       </div>
     </section>
   </main>
+
+  <div class="viewer" id="viewer" hidden role="dialog" aria-modal="true" aria-label="Pemutar">
+    <button type="button" class="vclose" id="vclose" aria-label="Tutup">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <div class="vcover" id="cover" aria-hidden="true"></div>
+    <video id="player" controls playsinline preload="metadata"></video>
+    <p class="err verr" id="plErr" role="alert"></p>
+  </div>
 
   <nav class="bottomnav" aria-label="Navigasi utama">
     <button type="button" data-tab="home" aria-current="page"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg><span>Home</span></button>

@@ -171,3 +171,37 @@ small{color:var(--muted)}
 .alist .grp:first-child{border-radius:6px 6px 0 0}
 .pill{font-size:.72rem;font-weight:700;padding:2px 9px;border-radius:99px;color:#fff;background:#2f8f5b}
 .pill.premium{background:#b7791f}
+
+/* ===== grid video 2 kolom (tanpa judul) ===== */
+.vgrid{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-width:760px}
+.vgrid .empty{background:var(--surface);border:1px dashed var(--line);border-radius:12px;text-align:center}
+.tile{all:unset;box-sizing:border-box;position:relative;display:block;width:100%;aspect-ratio:16/9;border-radius:12px;overflow:hidden;
+  cursor:pointer;background:linear-gradient(135deg,#17306b,#2f5bff);-webkit-tap-highlight-color:transparent}
+.tile:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.tile video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;background:#0d141b}
+.tile .tic{position:absolute;inset:0;display:grid;place-items:center;color:rgba(255,255,255,.9)}
+.tile .tic svg{width:44px;height:44px}
+.tile .tplay{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;display:grid;place-items:center;
+  background:rgba(0,0,0,.5);color:#fff;transition:transform .15s}
+.tile.is-audio .tplay{display:none}
+.tile .tplay svg{width:20px;height:20px;margin-left:2px}
+.tile:hover .tplay{transform:scale(1.08)}
+.tile .tnum,.tile .tdur{position:absolute;bottom:6px;padding:1px 7px;border-radius:6px;background:rgba(0,0,0,.6);color:#fff;font:600 .72rem/1.5 "Source Sans 3",sans-serif}
+.tile .tnum{left:6px}
+.tile .tdur{right:6px}
+.tile .tdur:empty{display:none}
+
+/* ===== pemutar layar penuh ===== */
+.noscroll{overflow:hidden}
+.viewer{position:fixed;inset:0;z-index:100;background:#000;display:flex;align-items:center;justify-content:center}
+.viewer video{width:100%;height:100%;object-fit:contain;background:#000}
+.viewer.is-audio video{height:54px;position:absolute;left:0;right:0;bottom:calc(24px + env(safe-area-inset-bottom,0))}
+.vcover{display:none;color:rgba(255,255,255,.85)}
+.vcover svg{width:96px;height:96px}
+.viewer.is-audio .vcover{display:block}
+.vclose{all:unset;box-sizing:border-box;position:absolute;z-index:2;top:calc(12px + env(safe-area-inset-top,0));right:12px;width:44px;height:44px;border-radius:50%;
+  display:grid;place-items:center;cursor:pointer;color:#fff;background:rgba(0,0,0,.55);-webkit-tap-highlight-color:transparent}
+.vclose:hover{background:rgba(0,0,0,.8)}
+.vclose:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.verr{position:absolute;left:16px;right:72px;top:calc(20px + env(safe-area-inset-top,0));margin:0;color:#ff8a80;z-index:1;pointer-events:none}
+.verr:empty{display:none}
