@@ -404,3 +404,29 @@ button,a,input,select,summary,label{touch-action:manipulation}
 .nfform label{font-weight:600}
 .nfform select,.nfform input,.nfform textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit;margin-bottom:6px}
 .nfform textarea{resize:vertical;min-height:72px}
+
+/* ===== navbar pengguna: pil melayang, ringan & elegan (navbar admin tidak berubah) ===== */
+#app{padding-bottom:calc(100px + env(safe-area-inset-bottom,0px))}
+#app .bottomnav{
+  left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));max-width:420px;margin:0 auto;
+  gap:2px;padding:6px;border:1px solid color-mix(in srgb,var(--line) 70%,transparent);border-radius:28px;
+  background:color-mix(in srgb,var(--surface) 88%,transparent);
+  -webkit-backdrop-filter:blur(18px) saturate(1.4);backdrop-filter:blur(18px) saturate(1.4);
+  box-shadow:0 12px 32px rgba(15,25,35,.16),0 2px 6px rgba(15,25,35,.08);
+}
+@media (prefers-color-scheme:dark){
+  #app .bottomnav{box-shadow:0 12px 32px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.35)}
+}
+#app .bottomnav button{
+  min-height:56px;gap:4px;padding:8px 2px 6px;border-radius:22px;font-size:.7rem;font-weight:600;letter-spacing:.01em;
+  color:color-mix(in srgb,var(--muted) 92%,transparent);
+}
+#app .bottomnav button svg{width:23px;height:23px;stroke-width:1.7}
+#app .bottomnav button:hover{color:var(--ink);background:color-mix(in srgb,var(--ink) 5%,transparent)}
+#app .bottomnav button[aria-current="page"]{
+  color:var(--accent-ink);
+  background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 62%,#7b5cff));
+  box-shadow:0 6px 16px color-mix(in srgb,var(--accent) 38%,transparent);
+}
+#app .bottomnav button[aria-current="page"] svg{stroke-width:2.1;transform:translateY(-1px) scale(1.06)}
+#app .bottomnav .dot{top:5px;left:calc(50% + 6px);box-shadow:0 0 0 2px var(--surface)}
