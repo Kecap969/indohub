@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Indohub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- 1. Halaman masuk (user biasa atau admin) -->
+<main class="gate" id="gate" hidden>
+  <form id="gateForm" autocomplete="off">
+    <h1 id="gateTitle"></h1>
+    <p class="sub" id="gateSub"></p>
+    <label for="username">Username</label>
+    <input id="username" type="text" minlength="2" maxlength="30" required
+           pattern="[A-Za-z0-9_\-]{2,30}" autocapitalize="none" spellcheck="false" placeholder="mis. budi_01">
+    <div id="pwBox" hidden>
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password">
+    </div>
+    <p class="hint">2-30 karakter: huruf, angka, _ atau -</p>
+    <button class="btn" id="gateBtn" type="submit">Masuk</button>
+    <p class="err" id="gateErr" role="alert"></p>
+  </form>
+</main>
+
+<!-- 2. Halaman media (user biasa) -->
+<div id="app" hidden>
+  <header class="topbar">
+    <h1 id="title"></h1>
+  </header>
+
+  <main class="wrap">
+    <!-- Home (gratis) & Premium: daftar album, lalu daftar video di album -->
+    <section class="tab" id="tab-catalog" aria-label="Katalog">
+      <div id="albumView">
+        <div class="subcard" id="subCard" hidden></div>
+        <h2 class="tabttl" id="catTitle"></h2>
+        <div class="albums" id="albums"></div>
+      </div>
+      <div id="watchView" hidden>
+        <nav class="crumb" aria-label="Posisi">
+          <button type="button" id="backBtn" class="btn ghost">&larr; Album</button>
+          <span id="crumb"></span>
+        </nav>
+        <ul class="vgrid" id="list" aria-label="Daftar video"></ul>
+      </div>
+    </section>
+
+    <!-- Notifikasi -->
+    <section class="tab" id="tab-notif" aria-label="Notifikasi" hidden>
+        <ul class="notifs" id="notifs"></ul>
+    </section>
+
+    <!-- Profil -->
+    <section class="tab" id="tab-profil" aria-label="Profil" hidden>
+      <div class="card profile">
+        <div class="avatar" id="avatar" aria-hidden="true"></div>
+        <h2 id="who"></h2>
+        <p class="hint" id="mediaCount"></p>
+        <p class="hint" id="premInfo"></p>
+        <button class="btn ghost" id="pwToggle" type="button">Buat password</button>
+        <form id="pwForm" class="pwform" hidden autocomplete="off">
+          <input id="pwCur" type="password" placeholder="Password saat ini" autocomplete="current-password" hidden>
+          <input id="pwNew" type="password" placeholder="Password baru (min. 6 karakter)" autocomplete="new-password" minlength="6" required>
+          <button class="btn" type="submit">Simpan password</button>
+          <p class="err" id="pwErr" role="alert"></p>
+        </form>
+        <p class="hint" id="pwOk"></p>
+        <button class="btn danger" id="logout" type="button">Logout</button>
+      </div>
+    </section>
+  </main>
+
+  <div class="viewer" id="viewer" hidden role="dialog" aria-modal="true" aria-label="Pemutar">
+    <button type="button" class="vclose" id="vclose" aria-label="Tutup">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <div class="vcover" id="cover" aria-hidden="true"></div>
+    <video id="player" controls playsinline preload="metadata"></video>
+    <p class="err verr" id="plErr" role="alert"></p>
+  </div>
+
+  <!-- Modal berlangganan (muncul dari bawah) -->
+  <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="Berlangganan">
+    <div class="sheet-bg" id="sheetBg"></div>
+    <div class="sheet-box">
+      <div class="grab" aria-hidden="true"></div>
+      <button type="button" class="sclose" id="sheetClose" aria-label="Tutup">&times;</button>
+      <h2>Berlangganan Premium</h2>
+
+      <div id="stepPw" hidden>
+        <p class="hint">Buat password dulu supaya akun premium kamu tidak bisa dipakai orang lain.</p>
+        <input id="spw" type="password" placeholder="Password (min. 6 karakter)" autocomplete="new-password">
+        <button class="btn" id="spwBtn" type="button">Simpan &amp; lanjut</button>
+      </div>
+
+      <div id="stepPay" hidden>
+        <fieldset class="seg" aria-label="Durasi">
+          <label><input type="radio" name="mon" value="1" checked><span>1 bulan</span></label>
+          <label><input type="radio" name="mon" value="2"><span>2 bulan</span></label>
+          <label><input type="radio" name="mon" value="3"><span>3 bulan</span></label>
+          <label><input type="radio" name="mon" value="6"><span>6 bulan</span></label>
+        </fieldset>
+        <p class="total">Transfer tepat sebesar <b id="payAmount">-</b></p>
+        <p class="hint">Nominal sudah termasuk kode unik agar mudah dicek admin.</p>
+        <img id="qrisImg" class="qris" alt="QRIS pembayaran" hidden>
+        <p class="hint" id="qrisNone" hidden>QRIS belum tersedia. Hubungi admin.</p>
+        <label for="proofFile"><b>Bukti transfer</b></label>
+        <input id="proofFile" type="file" accept="image/*">
+        <progress id="proofProg" value="0" max="100" hidden></progress>
+        <button class="btn" id="proofBtn" type="button" disabled>Kirim bukti</button>
+      </div>
+
+      <div id="stepDone" hidden>
+        <p>Bukti transfer terkirim. Admin akan memeriksanya, dan hasilnya muncul di tab Notifikasi.</p>
+        <button class="btn" id="doneBtn" type="button">Tutup</button>
+      </div>
+      <p class="err" id="sheetErr" role="alert"></p>
+    </div>
+  </div>
+
+  <nav class="bottomnav" aria-label="Navigasi utama">
+    <button type="button" data-tab="home" aria-current="page"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg><span>Home</span></button>
+    <button type="button" data-tab="premium"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5L3 8z"/></svg><span>Premium</span></button>
+    <button type="button" data-tab="notif"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15L6 16z"/><path d="M10 21h4"/></svg><span>Notifikasi</span><i class="dot" id="notifDot" hidden></i></button>
+    <button type="button" data-tab="profil"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg><span>Profil</span></button>
+  </nav>
+</div>
+
+<!-- 3. Dashboard admin (tanpa form login; masuk lewat halaman 1) -->
+<div id="admin" hidden>
+  <div class="wrap">
+    <div class="bar">
+      <h1>Kelola media</h1>
+      <button class="btn ghost" id="aOut" type="button">Keluar</button>
+    </div>
+    <section class="upload" aria-label="Upload">
+      <h2>Upload video atau audio</h2>
+      <div class="row">
+        <input id="file" type="file" accept="video/*,audio/*">
+      </div>
+      <fieldset class="seg" aria-label="Kategori">
+        <label><input type="radio" name="cat" value="free" checked><span>Gratis</span></label>
+        <label><input type="radio" name="cat" value="premium"><span>Premium</span></label>
+      </fieldset>
+      <div class="row albumrow">
+        <label for="albumSel" id="albumSelLbl">Album</label>
+        <select id="albumSel"></select>
+        <input id="albumNew" type="text" maxlength="40" placeholder="Nama album baru" autocomplete="off">
+      </div>
+      <div class="row"><button class="btn" id="uploadBtn" type="button">Upload</button></div>
+      <progress id="prog" value="0" max="100" hidden></progress>
+      <p class="err" id="upErr" role="alert"></p>
+      <p class="hint" id="upOk" style="margin:6px 0 0"></p>
+    </section>
+    <section class="upload payadmin" aria-label="Pembayaran">
+      <h2>Pembayaran</h2>
+      <p class="hint">Harga langganan: <b id="priceTxt">-</b> / bulan (ubah di lib.js)</p>
+      <div class="row">
+        <img id="qrisPrev" class="qprev" alt="QRIS saat ini" hidden>
+        <input id="qrisFile" type="file" accept="image/*">
+        <button class="btn" id="qrisBtn" type="button">Simpan QRIS</button>
+      </div>
+      <p class="err" id="qrisErr" role="alert"></p>
+      <p class="hint" id="qrisOk" style="margin:6px 0 0"></p>
+      <h3>Bukti transfer</h3>
+      <ul class="plist" id="payList"></ul>
+      <h3>Pengguna</h3>
+      <ul class="plist" id="userList"></ul>
+      <p class="err" id="payErr" role="alert"></p>
+    </section>
+    <div class="stats">
+      <div><b id="sCount">0</b><span class="hint">file</span></div>
+      <div><b id="sSize">0</b><span class="hint">total ukuran</span></div>
+    </div>
+    <div class="tools">
+      <input type="search" id="q" placeholder="Cari nama file atau uploader">
+      <label><input type="checkbox" id="all"> Pilih semua</label>
+      <button class="btn danger" id="del" type="button" disabled>Hapus terpilih</button>
+    </div>
+    <p class="err" id="aerr" role="alert"></p>
+    <ul class="alist" id="alist"></ul>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
