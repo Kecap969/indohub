@@ -175,7 +175,7 @@ small{color:var(--muted)}
 /* ===== grid video 2 kolom (tanpa judul) ===== */
 .vgrid{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-width:760px}
 .vgrid .empty{background:var(--surface);border:1px dashed var(--line);border-radius:12px;text-align:center}
-.tile{all:unset;box-sizing:border-box;position:relative;display:block;width:100%;aspect-ratio:16/9;border-radius:12px;overflow:hidden;
+.tile{all:unset;box-sizing:border-box;position:relative;display:block;width:100%;aspect-ratio:1/1;border-radius:12px;overflow:hidden;
   cursor:pointer;background:linear-gradient(135deg,#17306b,#2f5bff);-webkit-tap-highlight-color:transparent}
 .tile:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .tile video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;background:#0d141b}
