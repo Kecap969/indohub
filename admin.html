@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin · Indohub</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- Dashboard admin (login lewat halaman utama /) -->
+<div id="admin" hidden>
+  <div class="wrap">
+    <div class="bar">
+      <h1>Kelola media</h1>
+      <button class="btn ghost" id="aOut" type="button">Keluar</button>
+    </div>
+    <section class="upload" aria-label="Upload">
+      <h2>Upload video atau audio</h2>
+      <div class="row">
+        <input id="file" type="file" accept="video/*,audio/*">
+      </div>
+      <fieldset class="seg" aria-label="Kategori">
+        <label><input type="radio" name="cat" value="free" checked><span>Gratis</span></label>
+        <label><input type="radio" name="cat" value="premium"><span>Premium</span></label>
+      </fieldset>
+      <div class="row albumrow">
+        <label for="albumSel" id="albumSelLbl">Album</label>
+        <select id="albumSel"></select>
+        <input id="albumNew" type="text" maxlength="40" placeholder="Nama album baru" autocomplete="off">
+      </div>
+      <div class="row"><button class="btn" id="uploadBtn" type="button">Upload</button></div>
+      <progress id="prog" value="0" max="100" hidden></progress>
+      <p class="err" id="upErr" role="alert"></p>
+      <p class="hint" id="upOk" style="margin:6px 0 0"></p>
+    </section>
+    <section class="upload payadmin" aria-label="Pembayaran">
+      <h2>Pembayaran</h2>
+      <p class="hint">Harga langganan: <b id="priceTxt">-</b> / bulan (ubah di lib.js)</p>
+      <div class="row">
+        <img id="qrisPrev" class="qprev" alt="QRIS saat ini" hidden>
+        <input id="qrisFile" type="file" accept="image/*">
+        <button class="btn" id="qrisBtn" type="button">Simpan QRIS</button>
+      </div>
+      <p class="err" id="qrisErr" role="alert"></p>
+      <p class="hint" id="qrisOk" style="margin:6px 0 0"></p>
+      <h3>Bukti transfer</h3>
+      <ul class="plist" id="payList"></ul>
+      <h3>Pengguna</h3>
+      <ul class="plist" id="userList"></ul>
+      <p class="err" id="payErr" role="alert"></p>
+    </section>
+    <div class="stats">
+      <div><b id="sCount">0</b><span class="hint">file</span></div>
+      <div><b id="sSize">0</b><span class="hint">total ukuran</span></div>
+    </div>
+    <div class="tools">
+      <input type="search" id="q" placeholder="Cari nama file atau uploader">
+      <label><input type="checkbox" id="all"> Pilih semua</label>
+      <button class="btn danger" id="del" type="button" disabled>Hapus terpilih</button>
+    </div>
+    <p class="err" id="aerr" role="alert"></p>
+    <ul class="alist" id="alist"></ul>
+  </div>
+</div>
+
+<script src="/admin.js"></script>
+</body>
+</html>

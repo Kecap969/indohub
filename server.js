@@ -73,9 +73,18 @@ const read = (f) => fs.readFileSync(path.join(__dirname, f), "utf8");
 const page = read("index.html");
 const css = read("style.css");
 const js = read("app.js");
+const adminPage = read("admin.html");
+const adminJs = read("admin.js");
 app.get("/", (req, res) => res.type("html").send(page));
 app.get("/style.css", (req, res) => res.type("css").send(css));
 app.get("/app.js", (req, res) => res.type("js").send(js));
+app.get("/admin.js", (req, res) => res.type("js").send(adminJs));
+// Dashboard admin: halaman terpisah. Login tetap di "/", API admin tetap dicek token di server.
+app.get(["/admin", "/admin/", "/admin.html"], (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("X-Robots-Tag", "noindex, nofollow");
+  res.type("html").send(adminPage);
+});
 
 app.get("/api/config", (req, res) => res.json({ ...SITE, adminUser: ADMIN_USER }));
 
@@ -407,7 +416,7 @@ app.post("/api/admin/users/:u/clear-password", needAdmin, needDb, async (req, re
   } catch (e) { fail(res, e, "Gagal menghapus password"); }
 });
 
-// Semua alamat lain → halaman tunggal (mis. /admin tetap membuka halaman yang sama)
+// Semua alamat lain → halaman utama
 app.use((req, res) => {
   if (req.path.startsWith("/api/")) return res.status(404).json({ error: "Tidak ditemukan" });
   res.type("html").send(page);
