@@ -246,7 +246,7 @@
   $("player").addEventListener("ended", () => { if (current + 1 < albumItems.length) playAt(current + 1); });
 
   async function loadItems(){
-    $("albums").innerHTML = ""; $("albums").appendChild(el("p", "empty", "Memuat..."));
+    $("albums").innerHTML = ""; for (let i = 0; i < 6; i++) $("albums").appendChild(el("div", "album skel"));
     lastRef = Date.now();
     try{
       const sres = await api("/api/session");
