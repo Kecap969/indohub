@@ -8,7 +8,8 @@ const SITE = {
   title: "Indohub",
   subtitle: "Streaming video dan audio",
   maxUploadMB: 2048,
-  pricePerMonth: 50000, // Rp per bulan
+  plans: { 1: 50000, 12: 100000 }, // paket: durasi (bulan) -> harga Rp
+  pricePerMonth: 50000, // harga 1 bulan
 };
 
 /* ---------- sesi (token HMAC) ---------- */

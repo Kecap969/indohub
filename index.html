@@ -44,6 +44,7 @@
       <div id="albumView">
         <div class="subcard" id="subCard" hidden></div>
         <h2 class="tabttl" id="catTitle"></h2>
+        <ul class="vgrid flat" id="homeList" aria-label="Video gratis" hidden></ul>
         <div class="albums" id="albums"></div>
       </div>
       <div id="watchView" hidden>
@@ -98,24 +99,40 @@
       <h2 id="sheetTitle">Berlangganan Premium</h2>
 
       <div id="stepPw" hidden>
+        <div class="sico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div>
         <p class="hint">Buat password dulu supaya akun premium kamu tidak bisa dipakai orang lain.</p>
         <input id="spw" type="password" placeholder="Password (min. 6 karakter)" autocomplete="new-password">
         <button class="btn" id="spwBtn" type="button">Simpan &amp; lanjut</button>
       </div>
 
       <div id="stepPay" hidden>
-        <fieldset class="seg" aria-label="Durasi">
-          <label><input type="radio" name="mon" value="1" checked><span>1 bulan</span></label>
-          <label><input type="radio" name="mon" value="2"><span>2 bulan</span></label>
-          <label><input type="radio" name="mon" value="3"><span>3 bulan</span></label>
-          <label><input type="radio" name="mon" value="6"><span>6 bulan</span></label>
-        </fieldset>
-        <p class="total">Transfer tepat sebesar <b id="payAmount">-</b></p>
-        <p class="hint">Nominal sudah termasuk kode unik agar mudah dicek admin.</p>
-        <img id="qrisImg" class="qris" alt="QRIS pembayaran" hidden>
+        <p class="stephd"><span class="stepn">1</span>Pilih paket</p>
+        <div class="plans" role="radiogroup" aria-label="Pilih paket">
+          <label class="plan">
+            <input type="radio" name="mon" value="1" checked>
+            <span class="pbox"><span class="pname">1 bulan</span><b class="pprice" id="plan1">-</b><small>per bulan</small></span>
+          </label>
+          <label class="plan">
+            <input type="radio" name="mon" value="12">
+            <span class="pbox"><i class="pbadge" id="saveBadge" hidden>Hemat</i><span class="pname">1 tahun</span><b class="pprice" id="plan12">-</b><small id="plan12s">&nbsp;</small></span>
+          </label>
+        </div>
+
+        <p class="stephd"><span class="stepn">2</span>Transfer lewat QRIS</p>
+        <div class="paybox">
+          <span>Total transfer</span>
+          <b id="payAmount">-</b>
+          <small>Sudah termasuk kode unik agar mudah dicek admin. Transfer tepat sesuai nominal.</small>
+        </div>
+        <div class="qrisbox" id="qrisBox" hidden>
+          <img id="qrisImg" class="qris" alt="QRIS pembayaran" hidden>
+          <p class="qcap">Scan dengan e-wallet atau m-banking</p>
+        </div>
         <p class="hint" id="qrisNone" hidden>QRIS belum tersedia. Hubungi admin.</p>
-        <label for="proofFile"><b>Bukti transfer</b></label>
-        <input id="proofFile" type="file" accept="image/*">
+
+        <p class="stephd"><span class="stepn">3</span>Kirim bukti transfer</p>
+        <input id="proofFile" type="file" accept="image/*" class="sr">
+        <label class="drop" for="proofFile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 9"/></svg><span id="proofName">Pilih foto bukti transfer</span></label>
         <progress id="proofProg" value="0" max="100" hidden></progress>
         <button class="btn" id="proofBtn" type="button" disabled>Kirim bukti</button>
       </div>
@@ -134,8 +151,10 @@
         <button class="btn" id="dtClose" type="button">Tutup</button>
       </div>
 
-      <div id="stepDone" hidden>
-        <p>Bukti transfer terkirim. Admin akan memeriksanya, dan hasilnya muncul di tab Notifikasi.</p>
+      <div id="stepDone" class="done" hidden>
+        <div class="sico ok" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+        <p><b>Bukti transfer terkirim</b></p>
+        <p class="hint">Admin akan memeriksanya, dan hasilnya muncul di tab Notifikasi.</p>
         <button class="btn" id="doneBtn" type="button">Tutup</button>
       </div>
       <p class="err" id="sheetErr" role="alert"></p>

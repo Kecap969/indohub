@@ -13,6 +13,7 @@
   });
   const ss = store(window.sessionStorage);
   const rupiah = n => "Rp" + Number(n).toLocaleString("id-ID");
+  const durTxt = m => m % 12 === 0 ? (m / 12) + " thn" : m + " bln";
   const fmtDate = d => new Date(d).toLocaleDateString("id-ID", { day:"numeric", month:"short", year:"numeric" });
   const fmtDateTime = d => new Date(d).toLocaleString("id-ID", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" });
   const fmtSize = b => b >= 1073741824 ? (b/1073741824).toFixed(1)+" GB" : b >= 1048576 ? (b/1048576).toFixed(1)+" MB" : Math.max(1,Math.round(b/1024))+" KB";
@@ -104,7 +105,8 @@
       if (r.status === 401){ adminExpired(); return; }
       if (!r.ok) throw new Error(r.d.error || "Gagal memuat data pembayaran");
       price = r.d.price; pays = r.d.payments || []; users = r.d.users || [];
-      $("priceTxt").textContent = rupiah(price);
+      const pl = r.d.plans || { 1: price, 12: price * 12 };
+      $("priceTxt").textContent = rupiah(pl[1]) + " / bulan · " + rupiah(pl[12]) + " / tahun";
       const q = $("qrisPrev"); q.hidden = !r.d.qris; if (r.d.qris) q.src = r.d.qris;
       $("payErr").textContent = "";
       renderPays(); renderUsers(); fillNotifyTargets(); renderHome(); updateDot();
@@ -161,6 +163,7 @@
     const none = !names.length;
     sel.hidden = none; $("albumSelLbl").hidden = none;
     if (none) sel.value = NEW;
+    $("albumRow").hidden = catVal() === "free"; // video gratis tidak memakai album
     toggleNew();
   }
   function toggleNew(){
@@ -172,6 +175,7 @@
   $("albumSel").addEventListener("change", () => { toggleNew(); if (!$("albumNew").hidden) $("albumNew").focus(); });
 
   function chosenAlbum(){
+    if (catVal() === "free") return "Umum"; // folder internal; pengguna melihat semua video gratis langsung di Home
     if ($("albumSel").value !== NEW) return $("albumSel").value;
     const typed = $("albumNew").value.replace(/[^\p{L}\p{N} _-]/gu, "").replace(/\s+/g, " ").trim();
     const same = albumsOf(catVal()).find(a => a.name.toLowerCase() === typed.toLowerCase()); // jangan buat album ganda
@@ -390,11 +394,11 @@
       const img = el("img"); img.alt = "Bukti " + p.username; img.loading = "lazy"; if (p.proofUrl) img.src = p.proofUrl; a.appendChild(img);
       const mid = el("div"), nm = el("div", "name", p.username);
       nm.append(" ", el("span", "pill " + p.status, PSTAT[p.status]));
-      mid.append(nm, el("div", "meta", rupiah(p.amount) + " · " + p.months + " bln · " + fmtDateTime(p.createdAt) + (p.reason ? " · " + p.reason : "")));
+      mid.append(nm, el("div", "meta", rupiah(p.amount) + " · " + durTxt(p.months) + " · " + fmtDateTime(p.createdAt) + (p.reason ? " · " + p.reason : "")));
       const acts = el("div", "pacts");
       if (p.status === "pending"){
         const sel = el("select"); sel.setAttribute("aria-label", "Durasi");
-        [1, 2, 3, 6, 12].forEach(m => { const o = el("option", "", m + " bln"); o.value = m; if (m === p.months) o.selected = true; sel.appendChild(o); });
+        [...new Set([1, 12, p.months])].sort((a, b) => a - b).forEach(m => { const o = el("option", "", durTxt(m)); o.value = m; if (m === p.months) o.selected = true; sel.appendChild(o); });
         const ok = el("button", "btn", "Setujui"); ok.type = "button";
         ok.addEventListener("click", () => { ok.disabled = true; decide(p.id, "approve", { months: Number(sel.value) }); });
         const no = el("button", "btn danger", "Tolak"); no.type = "button";

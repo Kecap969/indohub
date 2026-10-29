@@ -276,7 +276,7 @@ app.get("/api/payment/info", needUser, needR2, async (req, res) => {
 // Buat/ubah tagihan (status "waiting") dengan kode unik supaya mudah dicocokkan admin
 app.post("/api/payment/start", needUser, needDb, async (req, res) => {
   const months = Number((req.body || {}).months);
-  if (![1, 2, 3, 6, 12].includes(months)) return res.status(400).json({ error: "Durasi tidak valid" });
+  if (!SITE.plans[months]) return res.status(400).json({ error: "Durasi tidak valid" });
   try {
     const me = await meInfo(req.user);
     if (!me) return res.status(401).json({ error: "Akun tidak ditemukan" });
@@ -292,7 +292,7 @@ app.post("/api/payment/start", needUser, needDb, async (req, res) => {
       const used = new Set(open.map((p) => p.unique_code));
       for (let i = 0; i < 200 && (!code || used.has(code)); i++) code = 1 + Math.floor(Math.random() * (i < 100 ? 99 : 999));
     }
-    const amount = SITE.pricePerMonth * months + code;
+    const amount = SITE.plans[months] + code;
     const row = mine
       ? (await db("PATCH", `ih_payments?id=eq.${mine.id}`, { months, amount }))[0]
       : (await db("POST", "ih_payments", { username_lc: req.user, months, amount, unique_code: code }))[0];
@@ -371,6 +371,7 @@ app.get("/api/admin/overview", needAdmin, needDb, needR2, async (req, res) => {
     })));
     res.json({
       price: SITE.pricePerMonth,
+      plans: SITE.plans,
       qris: hasQris ? await signGet(QRIS_KEY, 3600) : null,
       payments,
       users: users.map((u) => ({ username: u.username, key: u.username_lc, hasPassword: !!u.pass_hash, premiumUntil: until.get(u.username_lc) || null })),
@@ -383,7 +384,7 @@ app.post("/api/admin/payments/:id/approve", needAdmin, needDb, async (req, res) 
   try {
     const p = (await db("GET", `ih_payments?id=eq.${req.params.id}&select=id,username_lc,months,status`))[0];
     if (!p || p.status !== "pending") return res.status(400).json({ error: "Pembayaran ini sudah diproses atau belum dikirim" });
-    const months = [1, 2, 3, 6, 12].includes(Number((req.body || {}).months)) ? Number(req.body.months) : p.months;
+    const months = SITE.plans[Number((req.body || {}).months)] ? Number(req.body.months) : p.months;
     // perpanjang dari tanggal berakhir kalau masih aktif, selain itu dari sekarang
     const cur = (await db("GET", `ih_subscriptions?username_lc=eq.${enc(p.username_lc)}&select=expires_at`))[0];
     const base = cur && new Date(cur.expires_at) > new Date() ? new Date(cur.expires_at) : new Date();

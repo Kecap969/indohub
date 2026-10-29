@@ -2,7 +2,7 @@
   const $ = id => document.getElementById(id);
   const NAME_KEY = "media_username", TOKEN_KEY = "admin_token", UKEY = "user_token", SEEN_KEY = "media_seen";
   const NAME_RE = /^[A-Za-z0-9_-]{2,30}$/;
-  let cfg = { title:"Indohub", subtitle:"", maxUploadMB:2048, adminUser:"kecap", pricePerMonth:50000 };
+  let cfg = { title:"Indohub", subtitle:"", maxUploadMB:2048, adminUser:"kecap", pricePerMonth:50000, plans:{ 1:50000, 12:100000 } };
   let username = "", items = [], token = "", utoken = "", me = {}, srv = [], hls = null, forcePw = false, lastRef = 0;
   let tab = "home", openAlbum = null, albumItems = [], current = -1;
 
@@ -13,6 +13,7 @@
   });
   const ls = store(window.localStorage), ss = store(window.sessionStorage);
   const rupiah = n => "Rp" + Number(n).toLocaleString("id-ID");
+  const durTxt = m => m % 12 === 0 ? (m / 12) + " tahun" : m + " bulan";
   const fmtDate = d => new Date(d).toLocaleDateString("id-ID", { day:"numeric", month:"short", year:"numeric" });
   // panggilan API: otomatis membawa token admin atau token user
   async function api(path, body, method){
@@ -114,8 +115,11 @@
   function hue(s){ let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return h; }
   function renderAlbums(){
     const cat = tab === "premium" ? "premium" : "free";
-    $("catTitle").textContent = cat === "premium" ? "Album premium" : "Album gratis";
+    $("catTitle").textContent = cat === "premium" ? "Album premium" : "Video gratis";
     renderSubCard(cat);
+    // Home: semua video gratis langsung tampil (tanpa folder). Premium tetap per album.
+    $("albums").hidden = cat === "free"; $("homeList").hidden = cat !== "free";
+    if (cat === "free"){ renderFree(); return; }
     const box = $("albums"); box.innerHTML = "";
     const list = albumsOf(cat);
     if (!list.length){
@@ -169,9 +173,14 @@
     });
   }, { rootMargin: "200px" }) : null;
 
-  function renderList(){
-    const list = $("list"); list.innerHTML = "";
-    if (!albumItems.length){ const li = el("li", "empty", "Album ini kosong."); li.style.gridColumn = "1/-1"; list.appendChild(li); return; }
+  // semua video gratis, terbaru di atas (albumItems dipakai pemutar untuk urutan putar)
+  function renderFree(){
+    albumItems = items.filter(i => i.category === "free").sort((a,b) => ts(b) - ts(a));
+    renderList($("homeList"), "Belum ada video gratis.");
+  }
+  function renderList(list, emptyMsg){
+    list = list || $("list"); list.innerHTML = "";
+    if (!albumItems.length){ const li = el("li", "empty", emptyMsg || "Album ini kosong."); li.style.gridColumn = "1/-1"; list.appendChild(li); return; }
     albumItems.forEach((it, i) => {
       const li = el("li"), b = el("button", "tile"); b.type = "button";
       b.setAttribute("aria-label", "Putar " + it.title);
@@ -254,6 +263,7 @@
 
   async function loadItems(){
     $("albums").innerHTML = ""; for (let i = 0; i < 6; i++) $("albums").appendChild(el("div", "album skel"));
+    $("homeList").innerHTML = ""; for (let i = 0; i < 6; i++) $("homeList").appendChild(el("li", "skeltile"));
     lastRef = Date.now();
     try{
       const sres = await api("/api/session");
@@ -261,7 +271,11 @@
       if (sres.ok){ me = sres.d.me; applyMe(); }
     }catch(e){}
     try{ items = await fetchItems(); }
-    catch(e){ items = []; $("albums").innerHTML = ""; $("albums").appendChild(el("p", "empty", e.message)); return; }
+    catch(e){
+      items = []; $("albums").innerHTML = ""; $("albums").appendChild(el("p", "empty", e.message));
+      $("homeList").innerHTML = ""; const li = el("li", "empty", e.message); li.style.gridColumn = "1/-1"; $("homeList").appendChild(li);
+      return;
+    }
     try{ const n = await api("/api/notifs"); srv = n.ok ? n.d.items : []; }catch(e){ srv = []; }
     $("mediaCount").textContent = openItems().length + " media tersedia";
     if (!openAlbum && (tab === "home" || tab === "premium")) renderAlbums();
@@ -344,23 +358,50 @@
   });
 
   /* ---------- kartu & modal berlangganan ---------- */
+  const ICON_CROWN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5L3 8z"/></svg>';
+  const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
   function renderSubCard(cat){
     const c = $("subCard"); c.hidden = cat !== "premium"; if (cat !== "premium") return;
     c.innerHTML = ""; c.classList.toggle("on", !!me.premiumUntil);
+    const ic = el("span", "sic"); ic.innerHTML = ICON_CROWN; ic.setAttribute("aria-hidden", "true");
     if (me.pending){
       c.classList.remove("on"); c.classList.add("waiting");
-      const t = el("div"), b = el("button", "btn", "Detail selengkapnya"); b.type = "button";
+      const t = el("div"), b = el("button", "btn", "Lihat detail pembayaran"); b.type = "button";
       t.append(el("b", "", "Menunggu verifikasi"), el("small", "", "Bukti transfer " + rupiah(me.pending.amount) + " sedang diperiksa admin"));
       b.addEventListener("click", openDetail);
-      c.append(t, b); return;
+      c.append(ic, t, b); return;
     }
     c.classList.remove("waiting");
     const t = el("div"), b = el("button", "btn", me.premiumUntil ? "Perpanjang" : "Berlangganan sekarang"); b.type = "button";
     if (me.premiumUntil) t.append(el("b", "", "Premium aktif"), el("small", "", "Berlaku sampai " + fmtDate(me.premiumUntil)));
-    else t.append(el("b", "", "Buka semua album premium"), el("small", "", "Mulai " + rupiah(cfg.pricePerMonth) + " / bulan"));
+    else t.append(el("b", "", "Buka semua album premium"), el("small", "", "Mulai " + rupiah(cfg.plans[1]) + " / bulan · " + rupiah(cfg.plans[12]) + " / tahun"));
     b.addEventListener("click", openSheet);
-    c.append(t, b);
+    c.append(ic, t);
+    if (!me.premiumUntil){
+      const ul = el("ul", "perks");
+      ["Semua album premium terbuka", "Putar video dan audio tanpa batas", "Perpanjang kapan saja, sisa masa aktif tetap dihitung"].forEach(s => {
+        const li = el("li"), i = el("span"); i.innerHTML = ICON_CHECK; li.append(i, el("span", "", s)); ul.appendChild(li);
+      });
+      c.appendChild(ul);
+    }
+    c.appendChild(b);
   }
+
+  // isi harga paket di jendela berlangganan dari konfigurasi server
+  function renderPlans(){
+    const p1 = cfg.plans[1], p12 = cfg.plans[12];
+    $("plan1").textContent = rupiah(p1); $("plan12").textContent = rupiah(p12);
+    $("plan12s").textContent = "≈ " + rupiah(Math.round(p12 / 12)) + " / bulan";
+    const save = Math.round((1 - p12 / (p1 * 12)) * 100);
+    $("saveBadge").hidden = save <= 0; $("saveBadge").textContent = "Hemat " + save + "%";
+  }
+  const proofLabel = "Pilih foto bukti transfer";
+  function showProofName(){
+    const f = $("proofFile").files[0];
+    $("proofName").textContent = f ? f.name : proofLabel;
+    document.querySelector(".drop").classList.toggle("has", !!f);
+  }
+  $("proofFile").addEventListener("change", showProofName);
 
   let pay = null, qrisLoaded = false;
   const sheetErr = m => { $("sheetErr").textContent = m || ""; };
@@ -373,7 +414,7 @@
     $("sheetTitle").textContent = "Detail pembayaran";
     $("stepDetail").hidden = false; $("sheet").hidden = false; document.body.classList.add("noscroll");
     const p0 = me.pending;
-    $("dtMonths").textContent = p0 ? p0.months + " bulan" : "-";
+    $("dtMonths").textContent = p0 ? durTxt(p0.months) : "-";
     $("dtAmount").textContent = p0 ? rupiah(p0.amount) : "-";
     $("dtDate").textContent = p0 ? fmtDateTime(p0.createdAt) : "-";
     $("dtProofLink").hidden = true; $("dtProofNone").hidden = true;
@@ -385,7 +426,7 @@
       if (!p){ // sudah diproses admin: tutup & segarkan status
         me.pending = null; closeSheet(); refreshSubCard(); lastRef = 0; return;
       }
-      $("dtMonths").textContent = p.months + " bulan";
+      $("dtMonths").textContent = durTxt(p.months);
       $("dtAmount").textContent = rupiah(p.amount);
       $("dtDate").textContent = fmtDateTime(p.createdAt);
       if (p.proofUrl){ $("dtProof").src = p.proofUrl; $("dtProofLink").href = p.proofUrl; $("dtProofLink").hidden = false; }
@@ -394,7 +435,8 @@
   }
   async function openSheet(){
     if (me.pending){ openDetail(); return; } // sudah kirim bukti: jangan buat tagihan baru
-    sheetErr(""); pay = null; $("stepDone").hidden = true; $("stepDetail").hidden = true; $("proofFile").value = "";
+    sheetErr(""); pay = null; $("stepDone").hidden = true; $("stepDetail").hidden = true; $("proofFile").value = ""; showProofName();
+    renderPlans();
     $("sheetTitle").textContent = "Berlangganan Premium";
     $("sheet").hidden = false; document.body.classList.add("noscroll");
     if (!me.hasPassword){ $("stepPay").hidden = true; $("stepPw").hidden = false; $("spw").focus(); return; }
@@ -405,7 +447,7 @@
   async function loadQris(){
     try{
       const r = await api("/api/payment/info"); if (!r.ok) throw new Error(r.d.error || "Gagal memuat QRIS");
-      const q = $("qrisImg"); q.hidden = !r.d.qris; $("qrisNone").hidden = !!r.d.qris;
+      const q = $("qrisImg"); q.hidden = !r.d.qris; $("qrisBox").hidden = !r.d.qris; $("qrisNone").hidden = !!r.d.qris;
       if (r.d.qris) q.src = r.d.qris;
     }catch(e){ sheetErr(e.message); }
   }
