@@ -34,8 +34,8 @@
       const x = new XMLHttpRequest();
       x.open("PUT", url); x.setRequestHeader("Content-Type", type);
       x.upload.onprogress = e => { if (e.lengthComputable && onProg) onProg(Math.round(e.loaded / e.total * 100)); };
-      x.onload = () => x.status >= 200 && x.status < 300 ? resolve() : reject(new Error("Upload ditolak R2 (kode " + x.status + ")"));
-      x.onerror = () => reject(new Error("Upload gagal. Periksa CORS R2: method PUT dan header Content-Type harus diizinkan."));
+      x.onload = () => x.status >= 200 && x.status < 300 ? resolve() : reject(new Error("Upload ditolak (kode " + x.status + ")"));
+      x.onerror = () => reject(new Error("Upload gagal. Periksa koneksi dan pengaturan CORS penyimpanan (method PUT dan header Content-Type harus diizinkan)."));
       x.send(file);
     });
   }
@@ -383,7 +383,7 @@
       if (p.status === 401){ adminExpired(); return; }
       if (!p.ok) throw new Error(p.d.error || "Gagal memulai upload");
       await putFile(p.d.uploadUrl, f, f.type);
-      $("qrisFile").value = ""; ok.textContent = "QRIS tersimpan di payment/qris.jpg.";
+      $("qrisFile").value = ""; ok.textContent = "QRIS berhasil disimpan.";
       loadPay();
     }catch(e){ err.textContent = e.message; }
     finally{ btn.disabled = false; }

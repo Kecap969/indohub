@@ -1,4 +1,4 @@
-// Gabungan: pengaturan situs + sesi/login + password + Supabase + Cloudflare R2
+// Pengaturan situs, sesi/login, password, database, dan penyimpanan media
 const crypto = require("crypto");
 const { promisify } = require("util");
 const { S3Client } = require("@aws-sdk/client-s3");
@@ -6,7 +6,7 @@ const { S3Client } = require("@aws-sdk/client-s3");
 /* ---------- pengaturan situs ---------- */
 const SITE = {
   title: "Indohub",
-  subtitle: "Upload dan streaming langsung dari Cloudflare R2",
+  subtitle: "Streaming video dan audio",
   maxUploadMB: 2048,
   pricePerMonth: 50000, // Rp per bulan
 };
@@ -89,7 +89,7 @@ async function db(method, path, body, prefer) {
   const txt = await r.text();
   let data = null;
   try { data = txt ? JSON.parse(txt) : null; } catch (e) {}
-  if (!r.ok) throw new Error((data && data.message) || "Database error " + r.status);
+  if (!r.ok) throw new Error((data && data.message) || "Kesalahan data " + r.status);
   return data;
 }
 

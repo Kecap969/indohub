@@ -1,4 +1,4 @@
-// Server utama (Express): rute halaman + API. Modul pendukung: lib.js (config, sesi, Supabase, R2)
+// Server utama (Express): rute halaman + API. Modul pendukung: lib.js (config, sesi, data, penyimpanan)
 // Berjalan di Vercel (zero-config Express) maupun lokal: `node server.js`
 const express = require("express");
 const fs = require("fs");
@@ -23,14 +23,15 @@ const QRIS_KEY = "payment/qris.jpg";
 const cleanAlbum = (v) => String(v || "").replace(/[^\p{L}\p{N} _-]/gu, "").replace(/\s+/g, " ").trim().slice(0, 40);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const enc = encodeURIComponent;
-const needR2 = (req, res, next) => {
-  const miss = missingEnv();
-  return miss.length ? res.status(500).json({ error: "Environment variable belum lengkap: " + miss.join(", ") }) : next();
+// Konfigurasi belum lengkap: pengguna biasa hanya melihat pesan umum (tanpa nama layanan/variabel).
+// Detail variabel yang kurang hanya ditulis ke log server dan ditampilkan ke admin yang sudah login.
+const notReady = (req, res, miss) => {
+  console.error("Konfigurasi belum lengkap:", miss.join(", "));
+  const admin = isAdminToken(readToken(req));
+  return res.status(503).json({ error: admin ? "Konfigurasi server belum lengkap: " + miss.join(", ") : "Layanan sedang tidak tersedia, coba lagi nanti" });
 };
-const needDb = (req, res, next) => {
-  const miss = dbMissing();
-  return miss.length ? res.status(500).json({ error: "Environment variable belum lengkap: " + miss.join(", ") }) : next();
-};
+const needR2 = (req, res, next) => { const miss = missingEnv(); return miss.length ? notReady(req, res, miss) : next(); };
+const needDb = (req, res, next) => { const miss = dbMissing(); return miss.length ? notReady(req, res, miss) : next(); };
 const signGet = (key, secs) => getSignedUrl(r2(), new GetObjectCommand({ Bucket: bucket(), Key: key }), { expiresIn: secs || LINK_TTL });
 const exists = async (key) => {
   try { await r2().send(new HeadObjectCommand({ Bucket: bucket(), Key: key })); return true; } catch (e) { return false; }
@@ -90,7 +91,7 @@ app.get("/api/config", (req, res) => res.json({ ...SITE, adminUser: ADMIN_USER }
 
 /* ---------- login ---------- */
 app.post("/api/login", async (req, res) => { // admin
-  if (!process.env.ADMIN_PASSWORD) return res.status(500).json({ error: "Environment variable ADMIN_PASSWORD belum diisi" });
+  if (!process.env.ADMIN_PASSWORD) { console.error("ADMIN_PASSWORD belum diisi"); return res.status(503).json({ error: "Layanan sedang tidak tersedia, coba lagi nanti" }); }
   const { username, password } = req.body || {};
   if (!checkLogin(username, password)) {
     await wait(1000);
@@ -209,7 +210,7 @@ app.get("/api/list", needR2, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.json({ items, premium: member });
   } catch (e) {
-    res.status(500).json({ error: "Gagal membaca isi bucket" });
+    res.status(500).json({ error: "Gagal memuat daftar media" });
   }
 });
 

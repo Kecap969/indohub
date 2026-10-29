@@ -28,8 +28,8 @@
       const x = new XMLHttpRequest();
       x.open("PUT", url); x.setRequestHeader("Content-Type", type);
       x.upload.onprogress = e => { if (e.lengthComputable && onProg) onProg(Math.round(e.loaded / e.total * 100)); };
-      x.onload = () => x.status >= 200 && x.status < 300 ? resolve() : reject(new Error("Upload ditolak R2 (kode " + x.status + ")"));
-      x.onerror = () => reject(new Error("Upload gagal. Periksa CORS R2: method PUT dan header Content-Type harus diizinkan."));
+      x.onload = () => x.status >= 200 && x.status < 300 ? resolve() : reject(new Error("Upload ditolak (kode " + x.status + "), coba lagi"));
+      x.onerror = () => reject(new Error("Upload gagal. Periksa koneksi internet lalu coba lagi."));
       x.send(file);
     });
   }
@@ -241,7 +241,7 @@
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("viewer").hidden) closePlayer(true); });
   $("player").addEventListener("error", () => {
     if (!$("player").getAttribute("src") && !hls) return;
-    $("plErr").textContent = "Media tidak bisa dimuat. Periksa domain publik R2 dan pengaturan CORS.";
+    $("plErr").textContent = "Media tidak bisa dimuat. Periksa koneksi internet lalu coba lagi.";
   });
   $("player").addEventListener("ended", () => { if (current + 1 < albumItems.length) playAt(current + 1); });
 
