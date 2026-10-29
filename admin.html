@@ -38,7 +38,7 @@
       <details class="acard" id="upDetails">
         <summary>Upload video atau audio</summary>
         <div class="row" style="margin-top:12px">
-          <input id="file" type="file" accept="video/*,audio/*">
+          <input id="file" type="file" accept="video/*,audio/*" multiple>
         </div>
         <fieldset class="seg" aria-label="Kategori">
           <label><input type="radio" name="cat" value="free" checked><span>Gratis</span></label>
@@ -50,8 +50,8 @@
           <input id="albumNew" type="text" maxlength="40" placeholder="Nama album baru" autocomplete="off">
         </div>
         <div class="row" style="margin-top:12px"><button class="btn" id="uploadBtn" type="button">Upload</button></div>
-        <progress id="prog" value="0" max="100" hidden></progress>
-        <p class="err" id="upErr" role="alert"></p>
+        <ul class="uplist" id="upQueue"></ul>
+                <p class="err" id="upErr" role="alert"></p>
         <p class="hint" id="upOk" style="margin:6px 0 0"></p>
       </details>
       <div class="achips" id="mediaChips" role="group" aria-label="Filter kategori"></div>

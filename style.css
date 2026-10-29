@@ -309,3 +309,16 @@ small{color:var(--muted)}
   background:var(--surface);border:1px solid var(--line);box-shadow:0 6px 22px rgba(0,0,0,.18)}
 .selbar span{font-weight:600}
 .alist .grp input[type=checkbox]{flex:none}
+
+/* antrean upload banyak file */
+.uplist{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:6px}
+.uplist:empty{display:none}
+.uplist li{padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.uplist .uptop{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.uplist .upname{font-weight:600;word-break:break-all;min-width:0}
+.uplist .upst{color:var(--muted);font-size:.85rem;white-space:nowrap;flex:none}
+.uplist progress{margin-top:6px;height:6px}
+.uplist li.active{border-color:var(--accent)}
+.uplist li.okrow .upst{color:#2f8f5b;font-weight:600}
+.uplist li.failrow{border-color:var(--err)}
+.uplist li.failrow .upst{color:var(--err);font-weight:600;white-space:normal;text-align:right}

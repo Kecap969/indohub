@@ -200,49 +200,86 @@
     });
   }
 
+  /* ---------- upload banyak file sekaligus (antrean, satu per satu) ---------- */
+  let queue = []; // [{ f, li, st, bar }]
+  const typeOf = f => f.type || (/\.(mp4|m4v|mov)$/i.test(f.name) ? "video/mp4" : /\.mp3$/i.test(f.name) ? "audio/mpeg" : "");
+  function setSt(q, text, cls){ q.st.textContent = text; q.li.className = cls || ""; }
+  function renderQueue(){
+    const ul = $("upQueue"); ul.innerHTML = ""; queue = [];
+    [...$("file").files].forEach(f => {
+      const li = el("li"), top = el("div", "uptop");
+      const nm = el("span", "upname", f.name), st = el("span", "upst", fmtSize(f.size));
+      top.append(nm, st);
+      const bar = el("progress"); bar.max = 100; bar.value = 0; bar.hidden = true;
+      li.append(top, bar); ul.appendChild(li);
+      queue.push({ f, li, st, bar });
+    });
+    $("uploadBtn").textContent = queue.length > 1 ? "Upload " + queue.length + " file" : "Upload";
+  }
+  $("file").addEventListener("change", () => { $("upErr").textContent = ""; $("upOk").textContent = ""; renderQueue(); });
+
+  async function uploadOne(q, category, album){
+    const f = q.f, type = typeOf(f);
+    if (!/^(video|audio)\//.test(type)) throw new Error("Bukan file video/audio");
+    if (f.size > cfg.maxUploadMB * 1048576) throw new Error("Terlalu besar (maks " + cfg.maxUploadMB + " MB)");
+    const r = await fetch("/api/presign", {
+      method: "POST", headers: {"Content-Type":"application/json","Authorization":"Bearer "+token},
+      body: JSON.stringify({ category, album, filename: f.name, contentType: type, size: f.size })
+    });
+    const d = await r.json();
+    if (r.status === 401){ adminExpired(); throw new Error("Sesi habis"); }
+    if (!r.ok) throw new Error(d.error || "Gagal memulai upload");
+
+    q.bar.hidden = false; q.bar.value = 0;
+    await putFile(d.uploadUrl, f, type, v => { q.bar.value = v; q.st.textContent = "Mengunggah " + v + "%"; });
+
+    if (type.startsWith("video/")){
+      q.st.textContent = "Membuat thumbnail...";
+      try{
+        const blob = await makeThumb(f);
+        if (blob){
+          const tr = await fetch("/api/presign-thumb", {
+            method: "POST", headers: {"Content-Type":"application/json","Authorization":"Bearer "+token},
+            body: JSON.stringify({ key: d.key })
+          });
+          const td = await tr.json();
+          if (tr.ok) await fetch(td.uploadUrl, { method: "PUT", headers: {"Content-Type":"image/jpeg"}, body: blob });
+        }
+      }catch(e){ /* thumbnail gagal tidak membatalkan upload */ }
+    }
+    return d.album;
+  }
+
   $("uploadBtn").addEventListener("click", async () => {
-    const f = $("file").files[0], err = $("upErr"), ok = $("upOk"), prog = $("prog"), btn = $("uploadBtn");
+    const err = $("upErr"), ok = $("upOk"), btn = $("uploadBtn");
     err.textContent = ""; ok.textContent = "";
-    if (!f){ err.textContent = "Pilih file dulu."; return; }
+    if (!queue.length){ err.textContent = "Pilih file dulu."; return; }
     const album = chosenAlbum(), category = catVal();
     if (album.length < 2){ err.textContent = "Isi nama album (minimal 2 karakter)."; $("albumNew").focus(); return; }
-    const type = f.type || (/\.(mp4|m4v|mov)$/i.test(f.name) ? "video/mp4" : /\.mp3$/i.test(f.name) ? "audio/mpeg" : "");
-    if (!/^(video|audio)\//.test(type)){ err.textContent = "Hanya file video atau audio."; return; }
-    if (f.size > cfg.maxUploadMB * 1048576){ err.textContent = "File terlalu besar (maks " + cfg.maxUploadMB + " MB)."; return; }
 
-    btn.disabled = true; prog.hidden = false; prog.value = 0;
-    try{
-      const r = await fetch("/api/presign", {
-        method: "POST", headers: {"Content-Type":"application/json","Authorization":"Bearer "+token},
-        body: JSON.stringify({ category, album, filename: f.name, contentType: type, size: f.size })
-      });
-      const d = await r.json();
-      if (r.status === 401){ adminExpired(); return; }
-      if (!r.ok) throw new Error(d.error || "Gagal memulai upload");
-
-      await putFile(d.uploadUrl, f, type, v => { prog.value = v; });
-
-      if (type.startsWith("video/")){
-        try{
-          const blob = await makeThumb(f);
-          if (blob){
-            const tr = await fetch("/api/presign-thumb", {
-              method: "POST", headers: {"Content-Type":"application/json","Authorization":"Bearer "+token},
-              body: JSON.stringify({ key: d.key })
-            });
-            const td = await tr.json();
-            if (tr.ok) await fetch(td.uploadUrl, { method: "PUT", headers: {"Content-Type":"image/jpeg"}, body: blob });
-          }
-        }catch(e){ /* thumbnail gagal tidak membatalkan upload */ }
+    const lock = v => { [btn, $("file"), $("albumSel"), $("albumNew"), ...document.querySelectorAll("input[name=cat]")].forEach(x => { x.disabled = v; }); };
+    lock(true);
+    const failed = []; let done = 0, lastAlbum = album;
+    for (let i = 0; i < queue.length; i++){
+      const q = queue[i];
+      btn.textContent = "Mengunggah " + (i + 1) + " dari " + queue.length + "...";
+      setSt(q, "Mengunggah 0%", "active");
+      try{
+        lastAlbum = await uploadOne(q, category, album) || lastAlbum;
+        q.bar.value = 100; setSt(q, "Selesai ✓", "okrow"); done++;
+      }catch(e){
+        q.bar.hidden = true; setSt(q, "Gagal: " + e.message, "failrow"); failed.push(q.f);
+        if (e.message === "Sesi habis") return;
       }
-      ok.textContent = "Upload selesai: " + f.name + " → " + CATNAME[category] + " › " + d.album;
-      $("file").value = "";
-      await loadMedia(d.album);
-    }catch(e){
-      err.textContent = e.message;
-    }finally{
-      btn.disabled = false; prog.hidden = true;
     }
+    lock(false);
+    ok.textContent = done + " file berhasil diunggah ke " + CATNAME[category] + " › " + lastAlbum + (failed.length ? ", " + failed.length + " gagal" : "") + ".";
+    if (failed.length) err.textContent = "Ada file yang gagal. Tekan Upload lagi untuk mencoba ulang file yang gagal saja.";
+    // sisakan hanya file yang gagal (di antrean & input) supaya bisa dicoba ulang; baris selesai tetap tampil sebagai info
+    queue = queue.filter(q => failed.includes(q.f));
+    try{ const dt = new DataTransfer(); queue.forEach(q => dt.items.add(q.f)); $("file").files = dt.files; }catch(e){ if (!queue.length) $("file").value = ""; }
+    btn.textContent = queue.length > 1 ? "Upload " + queue.length + " file" : "Upload";
+    await loadMedia(lastAlbum);
   });
 
   /* ---------- media: daftar, pilih, hapus ---------- */
