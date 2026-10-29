@@ -150,7 +150,7 @@ app.post("/api/password", needUser, needDb, async (req, res) => {
 
 app.get("/api/notifs", needUser, needDb, async (req, res) => {
   try {
-    res.json({ items: await db("GET", `ih_notifications?username_lc=eq.${enc(req.user)}&select=id,title,body,created_at&order=created_at.desc&limit=20`) });
+    res.json({ items: await db("GET", `ih_notifications?or=(username_lc.eq.${enc(req.user)},username_lc.is.null)&select=id,title,body,created_at&order=created_at.desc&limit=20`) });
   } catch (e) { fail(res, e); }
 });
 
@@ -406,6 +406,26 @@ app.post("/api/admin/payments/:id/reject", needAdmin, needDb, async (req, res) =
     await notify(p.username_lc, "Pembayaran ditolak", reason || "Bukti transfer tidak sesuai. Silakan kirim ulang.");
     res.json({ ok: true });
   } catch (e) { fail(res, e, "Gagal menolak"); }
+});
+
+// Kirim notifikasi dari dashboard: to = "all" (semua pengguna) atau username tertentu
+app.post("/api/admin/notify", needAdmin, needDb, async (req, res) => {
+  const b = req.body || {};
+  const title = String(b.title || "").trim().slice(0, 80);
+  const body = String(b.body || "").trim().slice(0, 300);
+  const to = String(b.to || "all").trim().toLowerCase();
+  if (!title) return res.status(400).json({ error: "Judul notifikasi wajib diisi" });
+  try {
+    if (to === "all") {
+      await db("POST", "ih_notifications", { username_lc: null, title, body: body || null }, "return=minimal");
+      return res.json({ ok: true, to: "all" });
+    }
+    if (!NAME_RE.test(to)) return res.status(400).json({ error: "Username tidak valid" });
+    const u = await db("GET", `ih_users?username_lc=eq.${enc(to)}&select=username_lc`);
+    if (!u[0]) return res.status(404).json({ error: "Pengguna tidak ditemukan" });
+    await notify(to, title, body || null);
+    res.json({ ok: true, to });
+  } catch (e) { fail(res, e, "Gagal mengirim notifikasi"); }
 });
 
 app.post("/api/admin/users/:u/clear-password", needAdmin, needDb, async (req, res) => {

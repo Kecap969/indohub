@@ -107,7 +107,7 @@
       $("priceTxt").textContent = rupiah(price);
       const q = $("qrisPrev"); q.hidden = !r.d.qris; if (r.d.qris) q.src = r.d.qris;
       $("payErr").textContent = "";
-      renderPays(); renderUsers(); renderHome(); updateDot();
+      renderPays(); renderUsers(); fillNotifyTargets(); renderHome(); updateDot();
     }catch(e){ $("payErr").textContent = e.message; }
   }
   const pendingCount = () => pays.filter(p => p.status === "pending").length;
@@ -459,6 +459,32 @@
     });
   }
   $("uq").addEventListener("input", renderUsers);
+
+  /* ---------- kirim notifikasi ---------- */
+  function fillNotifyTargets(){
+    const sel = $("nfTo"), cur = sel.value || "all";
+    sel.innerHTML = "";
+    const add = (v, t) => { const o = el("option", "", t); o.value = v; sel.appendChild(o); };
+    add("all", "Semua pengguna (" + users.length + ")");
+    users.forEach(u => add(u.key, u.username));
+    sel.value = [...sel.options].some(o => o.value === cur) ? cur : "all";
+  }
+  $("nfBtn").addEventListener("click", async () => {
+    const title = $("nfTitle").value.trim(), body = $("nfBody").value.trim(), to = $("nfTo").value || "all";
+    $("nfErr").textContent = ""; $("nfOk").textContent = "";
+    if (!title){ $("nfErr").textContent = "Judul wajib diisi"; $("nfTitle").focus(); return; }
+    const label = to === "all" ? "semua pengguna" : $("nfTo").selectedOptions[0].textContent;
+    if (!confirm("Kirim notifikasi ke " + label + "?")) return;
+    $("nfBtn").disabled = true;
+    try{
+      const r = await api("/api/admin/notify", { title, body, to });
+      if (r.status === 401){ adminExpired(); return; }
+      if (!r.ok){ $("nfErr").textContent = r.d.error || "Gagal mengirim notifikasi"; return; }
+      $("nfOk").textContent = "Terkirim ke " + label + ".";
+      $("nfTitle").value = ""; $("nfBody").value = "";
+    }catch(e){ $("nfErr").textContent = "Tidak bisa terhubung ke server"; }
+    finally{ $("nfBtn").disabled = false; }
+  });
 
   /* ---------- start: wajib sudah login admin di halaman utama ---------- */
   async function start(){

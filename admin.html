@@ -84,6 +84,20 @@
 
     <!-- Pengguna -->
     <section class="apane" id="pane-users" aria-label="Pengguna" hidden>
+      <details class="acard" id="nfDetails">
+        <summary>Kirim notifikasi</summary>
+        <div class="nfform">
+          <label for="nfTo">Kirim ke</label>
+          <select id="nfTo"></select>
+          <label for="nfTitle">Judul</label>
+          <input id="nfTitle" type="text" maxlength="80" placeholder="mis. Album baru sudah tayang" autocomplete="off">
+          <label for="nfBody">Isi pesan (opsional)</label>
+          <textarea id="nfBody" rows="3" maxlength="300" placeholder="Tulis pesan singkat"></textarea>
+          <button class="btn" id="nfBtn" type="button">Kirim</button>
+          <p class="err" id="nfErr" role="alert"></p>
+          <p class="hint" id="nfOk" style="margin:0"></p>
+        </div>
+      </details>
       <div class="tools"><input type="search" id="uq" placeholder="Cari pengguna"></div>
       <div class="achips" id="userChips" role="group" aria-label="Filter pengguna"></div>
       <ul class="plist" id="userList"></ul>

@@ -102,6 +102,13 @@
     window.scrollTo(0, 0);
   }
   document.querySelectorAll(".bottomnav button").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
+  // sembunyikan navbar saat mengetik (keyboard HP), tampil lagi setelah selesai
+  (function(){
+    const nav = document.querySelector(".bottomnav");
+    const typing = t => t && /^(INPUT|TEXTAREA)$/.test(t.tagName) && !/^(file|radio|checkbox|button|submit|range)$/.test(t.type || "");
+    document.addEventListener("focusin", e => { if (typing(e.target)) nav.classList.add("kb"); });
+    document.addEventListener("focusout", () => nav.classList.remove("kb"));
+  })();
 
   /* ---------- daftar album ---------- */
   function hue(s){ let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return h; }
@@ -272,22 +279,18 @@
     return new Date(d).toLocaleDateString("id-ID", { day:"numeric", month:"short", year:"numeric" });
   }
   function updateDot(){
-    if (!openItems().length && !srv.length){ $("notifDot").hidden = true; return; }
-    if (!ls.get(SEEN_KEY)) ls.set(SEEN_KEY, String(latest())); // kunjungan pertama: anggap sudah dilihat
-    const n = openItems().filter(it => ts(it) > seen()).length + srv.filter(x => srvTs(x) > seen()).length;
+    if (!ls.get(SEEN_KEY)) ls.set(SEEN_KEY, String(latest() || Date.now())); // kunjungan pertama: anggap sudah dilihat
+    const n = srv.filter(x => srvTs(x) > seen()).length;
     $("notifDot").hidden = !n || tab === "notif"; $("notifDot").textContent = n > 9 ? "9+" : n;
   }
   const srvTs = n => new Date(n.created_at).getTime();
   const openItems = () => items.filter(i => !i.locked);
-  const latest = () => Math.max(0, ...openItems().map(ts), ...srv.map(srvTs));
+  const latest = () => Math.max(0, ...srv.map(srvTs));
   function renderNotifs(){
     const ul = $("notifs"); ul.innerHTML = "";
     const last = seen();
-    const feed = [
-      ...srv.map(n => ({ t: srvTs(n), title: n.title, sub: (n.body ? n.body + " · " : "") + relTime(n.created_at) })),
-      ...openItems().slice(0, 20).map(it => ({ t: ts(it), title: "Media baru: " + it.title,
-        sub: CATNAME[it.category] + " › " + it.album + " · " + relTime(it.lastModified) }))
-    ].sort((x, y) => y.t - x.t).slice(0, 30);
+    const feed = srv.map(n => ({ t: srvTs(n), title: n.title, sub: (n.body ? n.body + " · " : "") + relTime(n.created_at) }))
+      .sort((x, y) => y.t - x.t).slice(0, 30);
     if (!feed.length){ ul.appendChild(el("li", "empty", "Belum ada notifikasi.")); return; }
     feed.forEach(f => {
       const li = el("li", f.t > last ? "new" : "");
