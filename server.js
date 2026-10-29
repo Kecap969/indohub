@@ -1,22 +1,54 @@
-// Server utama (Express): rute halaman + API. Modul pendukung: site.config.js, auth.js, r2.js
+// Server utama (Express): rute halaman + API. Modul pendukung: lib.js (config, sesi, Supabase, R2)
 // Berjalan di Vercel (zero-config Express) maupun lokal: `node server.js`
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
-const { PutObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } = require("@aws-sdk/client-s3");
+const { PutObjectCommand, GetObjectCommand, HeadObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
-const SITE = require("./site.config");
-const { ADMIN_USER, checkLogin, makeToken, needAdmin } = require("./auth");
-const { missingEnv, client: r2, bucket, publicBase, VIDEO, AUDIO } = require("./r2");
+const {
+  SITE, ADMIN_USER, makeAdminToken, makeUserToken, readToken, isAdminToken, needAdmin, needUser,
+  checkLogin, hashPw, checkPw, dbMissing, db,
+  missingEnv, client: r2, bucket, VIDEO, AUDIO,
+} = require("./lib");
+
+const NAME_RE = /^[A-Za-z0-9_-]{2,30}$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const IMG_EXT = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
+const MAX_IMG = 5 * 1024 * 1024;
+const LINK_TTL = 6 * 3600; // link putar berlaku 6 jam
+const QRIS_KEY = "payment/qris.jpg";
 
 // Nama album jadi nama folder: hanya huruf, angka, spasi, - dan _
 const cleanAlbum = (v) => String(v || "").replace(/[^\p{L}\p{N} _-]/gu, "").replace(/\s+/g, " ").trim().slice(0, 40);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const enc = encodeURIComponent;
 const needR2 = (req, res, next) => {
   const miss = missingEnv();
   return miss.length ? res.status(500).json({ error: "Environment variable belum lengkap: " + miss.join(", ") }) : next();
 };
+const needDb = (req, res, next) => {
+  const miss = dbMissing();
+  return miss.length ? res.status(500).json({ error: "Environment variable belum lengkap: " + miss.join(", ") }) : next();
+};
+const signGet = (key, secs) => getSignedUrl(r2(), new GetObjectCommand({ Bucket: bucket(), Key: key }), { expiresIn: secs || LINK_TTL });
+const exists = async (key) => {
+  try { await r2().send(new HeadObjectCommand({ Bucket: bucket(), Key: key })); return true; } catch (e) { return false; }
+};
+const fail = (res, e, msg) => res.status(500).json({ error: msg || "Terjadi kesalahan di server" });
+
+/* ---------- data pengguna ---------- */
+async function premiumUntil(u) {
+  const rows = await db("GET", `ih_subscriptions?username_lc=eq.${enc(u)}&select=expires_at`);
+  const d = rows[0] && rows[0].expires_at;
+  return d && new Date(d) > new Date() ? d : null;
+}
+async function meInfo(u) {
+  const [users, until] = await Promise.all([db("GET", `ih_users?username_lc=eq.${enc(u)}&select=username,pass_hash`), premiumUntil(u)]);
+  if (!users[0]) return null;
+  return { username: users[0].username, hasPassword: !!users[0].pass_hash, premiumUntil: until };
+}
+const notify = (u, title, body) => db("POST", "ih_notifications", { username_lc: u, title, body }, "return=minimal");
 
 /* ---------- app ---------- */
 const app = express();
@@ -39,6 +71,72 @@ app.get("/app.js", (req, res) => res.type("js").send(js));
 
 app.get("/api/config", (req, res) => res.json({ ...SITE, adminUser: ADMIN_USER }));
 
+/* ---------- login ---------- */
+app.post("/api/login", async (req, res) => { // admin
+  if (!process.env.ADMIN_PASSWORD) return res.status(500).json({ error: "Environment variable ADMIN_PASSWORD belum diisi" });
+  const { username, password } = req.body || {};
+  if (!checkLogin(username, password)) {
+    await wait(1000);
+    return res.status(401).json({ error: "Username atau password salah" });
+  }
+  res.json({ token: makeAdminToken() });
+});
+app.get("/api/me", needAdmin, (req, res) => res.json({ ok: true }));
+
+// User biasa: username saja; kalau akun sudah punya password, password wajib
+app.post("/api/enter", needDb, async (req, res) => {
+  const name = String((req.body || {}).username || "").trim();
+  const password = (req.body || {}).password;
+  if (!NAME_RE.test(name)) return res.status(400).json({ error: "Username harus 2-30 karakter: huruf, angka, _ atau -" });
+  const u = name.toLowerCase();
+  if (u === ADMIN_USER) return res.status(400).json({ error: "Username ini dicadangkan" });
+  try {
+    let rows = await db("GET", `ih_users?username_lc=eq.${enc(u)}&select=username,pass_hash`);
+    if (!rows[0]) {
+      try { await db("POST", "ih_users", { username_lc: u, username: name }, "return=minimal"); } catch (e) { /* balapan: sudah dibuat */ }
+      rows = await db("GET", `ih_users?username_lc=eq.${enc(u)}&select=username,pass_hash`);
+    }
+    if (rows[0].pass_hash) {
+      if (!password) return res.status(401).json({ error: "Akun ini memakai password", needPassword: true });
+      if (!(await checkPw(password, rows[0].pass_hash))) {
+        await wait(1000);
+        return res.status(401).json({ error: "Password salah", needPassword: true });
+      }
+    }
+    res.json({ token: makeUserToken(u), me: await meInfo(u) });
+  } catch (e) { fail(res, e, "Gagal masuk"); }
+});
+
+app.get("/api/session", needUser, needDb, async (req, res) => {
+  try {
+    const me = await meInfo(req.user);
+    me ? res.json({ me }) : res.status(401).json({ error: "Akun tidak ditemukan" });
+  } catch (e) { fail(res, e); }
+});
+
+app.post("/api/password", needUser, needDb, async (req, res) => {
+  const { password, current } = req.body || {};
+  if (typeof password !== "string" || password.length < 6 || password.length > 100)
+    return res.status(400).json({ error: "Password minimal 6 karakter" });
+  try {
+    const rows = await db("GET", `ih_users?username_lc=eq.${enc(req.user)}&select=pass_hash`);
+    if (!rows[0]) return res.status(401).json({ error: "Akun tidak ditemukan" });
+    if (rows[0].pass_hash && !(await checkPw(current || "", rows[0].pass_hash))) {
+      await wait(1000);
+      return res.status(403).json({ error: "Password saat ini salah" });
+    }
+    await db("PATCH", `ih_users?username_lc=eq.${enc(req.user)}`, { pass_hash: await hashPw(password) }, "return=minimal");
+    res.json({ ok: true });
+  } catch (e) { fail(res, e, "Gagal menyimpan password"); }
+});
+
+app.get("/api/notifs", needUser, needDb, async (req, res) => {
+  try {
+    res.json({ items: await db("GET", `ih_notifications?username_lc=eq.${enc(req.user)}&select=id,title,body,created_at&order=created_at.desc&limit=20`) });
+  } catch (e) { fail(res, e); }
+});
+
+/* ---------- daftar media ---------- */
 // Struktur bucket: free/<album>/<ts>-<file>, premium/<album>/<ts>-<file>
 // File lama di uploads/<user>/... ditampilkan sebagai album "Lainnya" (gratis).
 const LEGACY_ALBUM = "Lainnya";
@@ -58,6 +156,10 @@ async function listPrefix(prefix) {
 
 app.get("/api/list", needR2, async (req, res) => {
   try {
+    const t = readToken(req);
+    let member = isAdminToken(t);
+    if (!member && t && t.k === "user") member = !!(await premiumUntil(t.u));
+
     const lists = await Promise.all(["free/", "premium/", "uploads/"].map(listPrefix));
     const items = lists.flat()
       .filter((o) => VIDEO.test(o.Key) || AUDIO.test(o.Key))
@@ -73,18 +175,24 @@ app.get("/api/list", needR2, async (req, res) => {
           size: o.Size,
           lastModified: o.LastModified,
           type: AUDIO.test(o.Key) ? "audio" : "video",
-          url: `${publicBase()}/${parts.map(encodeURIComponent).join("/")}`,
         };
       })
       .filter(Boolean)
       .sort((x, y) => new Date(y.lastModified) - new Date(x.lastModified));
+
+    // Premium hanya diberi link kalau member aktif (atau admin); yang lain hanya melihat daftar terkunci
+    await Promise.all(items.map(async (it) => {
+      if (it.category === "premium" && !member) it.locked = true;
+      else it.url = await signGet(it.key);
+    }));
     res.setHeader("Cache-Control", "no-store");
-    res.json({ items });
+    res.json({ items, premium: member });
   } catch (e) {
     res.status(500).json({ error: "Gagal membaca isi bucket" });
   }
 });
 
+/* ---------- admin: upload & hapus media ---------- */
 app.post("/api/presign", needAdmin, needR2, async (req, res) => {
   const { category, album, filename, contentType, size } = req.body || {};
   if (category !== "free" && category !== "premium")
@@ -100,28 +208,12 @@ app.post("/api/presign", needAdmin, needR2, async (req, res) => {
   const safeName = filename.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(-80) || "file";
   const key = `${category}/${albumName}/${Date.now()}-${safeName}`;
   try {
-    const uploadUrl = await getSignedUrl(
-      r2(),
-      new PutObjectCommand({ Bucket: bucket(), Key: key, ContentType: contentType }),
-      { expiresIn: 900 }
-    );
+    const uploadUrl = await getSignedUrl(r2(), new PutObjectCommand({ Bucket: bucket(), Key: key, ContentType: contentType }), { expiresIn: 900 });
     res.json({ uploadUrl, key, album: albumName });
   } catch (e) {
     res.status(500).json({ error: "Gagal membuat URL upload" });
   }
 });
-
-app.post("/api/login", async (req, res) => {
-  if (!process.env.ADMIN_PASSWORD) return res.status(500).json({ error: "Environment variable ADMIN_PASSWORD belum diisi" });
-  const { username, password } = req.body || {};
-  if (!checkLogin(username, password)) {
-    await wait(1000); // memperlambat tebak-tebakan password
-    return res.status(401).json({ error: "Username atau password salah" });
-  }
-  res.json({ token: makeToken() });
-});
-
-app.get("/api/me", needAdmin, (req, res) => res.json({ ok: true }));
 
 app.post("/api/delete", needAdmin, needR2, async (req, res) => {
   const keys = (req.body && req.body.keys) || [];
@@ -130,14 +222,148 @@ app.post("/api/delete", needAdmin, needR2, async (req, res) => {
   if (!keys.every((k) => typeof k === "string" && /^(free|premium|uploads)\//.test(k) && !k.includes("..")))
     return res.status(400).json({ error: "Hanya file di folder free/, premium/ atau uploads/ yang boleh dihapus" });
   try {
-    await r2().send(new DeleteObjectsCommand({
-      Bucket: bucket(),
-      Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
-    }));
+    await r2().send(new DeleteObjectsCommand({ Bucket: bucket(), Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true } }));
     res.json({ deleted: keys.length });
   } catch (e) {
     res.status(500).json({ error: "Gagal menghapus file" });
   }
+});
+
+/* ---------- pembayaran: sisi user ---------- */
+app.get("/api/payment/info", needUser, needR2, async (req, res) => {
+  try {
+    res.json({ price: SITE.pricePerMonth, qris: (await exists(QRIS_KEY)) ? await signGet(QRIS_KEY, 3600) : null });
+  } catch (e) { fail(res, e); }
+});
+
+// Buat/ubah tagihan (status "waiting") dengan kode unik supaya mudah dicocokkan admin
+app.post("/api/payment/start", needUser, needDb, async (req, res) => {
+  const months = Number((req.body || {}).months);
+  if (![1, 2, 3, 6, 12].includes(months)) return res.status(400).json({ error: "Durasi tidak valid" });
+  try {
+    const me = await meInfo(req.user);
+    if (!me) return res.status(401).json({ error: "Akun tidak ditemukan" });
+    if (!me.hasPassword) return res.status(403).json({ error: "Buat password dulu sebelum berlangganan", needPassword: true });
+
+    const open = await db("GET", "ih_payments?status=in.(waiting,pending)&select=username_lc,status,unique_code");
+    if (open.filter((p) => p.username_lc === req.user && p.status === "pending").length >= 3)
+      return res.status(429).json({ error: "Masih ada bukti yang menunggu persetujuan admin" });
+
+    const mine = (await db("GET", `ih_payments?username_lc=eq.${enc(req.user)}&status=eq.waiting&select=id,unique_code&limit=1`))[0];
+    let code = mine ? mine.unique_code : 0;
+    if (!code) {
+      const used = new Set(open.map((p) => p.unique_code));
+      for (let i = 0; i < 200 && (!code || used.has(code)); i++) code = 1 + Math.floor(Math.random() * (i < 100 ? 99 : 999));
+    }
+    const amount = SITE.pricePerMonth * months + code;
+    const row = mine
+      ? (await db("PATCH", `ih_payments?id=eq.${mine.id}`, { months, amount }))[0]
+      : (await db("POST", "ih_payments", { username_lc: req.user, months, amount, unique_code: code }))[0];
+    res.json({ id: row.id, months, amount, code });
+  } catch (e) { fail(res, e, "Gagal membuat tagihan"); }
+});
+
+async function ownWaiting(req) {
+  if (!UUID_RE.test(req.params.id)) return null;
+  const rows = await db("GET", `ih_payments?id=eq.${req.params.id}&username_lc=eq.${enc(req.user)}&status=eq.waiting&select=id,proof_key`);
+  return rows[0] || null;
+}
+app.post("/api/payment/:id/presign", needUser, needDb, needR2, async (req, res) => {
+  const { contentType, size } = req.body || {};
+  const ext = IMG_EXT[contentType];
+  if (!ext) return res.status(400).json({ error: "Bukti harus berupa gambar (JPG, PNG, atau WebP)" });
+  if (!size || size > MAX_IMG) return res.status(400).json({ error: "Ukuran gambar maksimal 5 MB" });
+  try {
+    const p = await ownWaiting(req);
+    if (!p) return res.status(404).json({ error: "Tagihan tidak ditemukan, buka ulang halaman berlangganan" });
+    const key = `payment/bukti/${p.id}.${ext}`;
+    await db("PATCH", `ih_payments?id=eq.${p.id}`, { proof_key: key }, "return=minimal");
+    const uploadUrl = await getSignedUrl(r2(), new PutObjectCommand({ Bucket: bucket(), Key: key, ContentType: contentType }), { expiresIn: 900 });
+    res.json({ uploadUrl });
+  } catch (e) { fail(res, e, "Gagal membuat URL upload"); }
+});
+app.post("/api/payment/:id/submit", needUser, needDb, needR2, async (req, res) => {
+  try {
+    const p = await ownWaiting(req);
+    if (!p || !p.proof_key || !(await exists(p.proof_key))) return res.status(400).json({ error: "Bukti belum terupload" });
+    await db("PATCH", `ih_payments?id=eq.${p.id}`, { status: "pending" }, "return=minimal");
+    res.json({ ok: true });
+  } catch (e) { fail(res, e, "Gagal mengirim bukti"); }
+});
+
+/* ---------- pembayaran: sisi admin ---------- */
+app.post("/api/payment/qris-presign", needAdmin, needR2, async (req, res) => {
+  const { contentType, size } = req.body || {};
+  if (!IMG_EXT[contentType]) return res.status(400).json({ error: "QRIS harus berupa gambar (JPG, PNG, atau WebP)" });
+  if (!size || size > MAX_IMG) return res.status(400).json({ error: "Ukuran gambar maksimal 5 MB" });
+  try {
+    // selalu disimpan sebagai payment/qris.jpg (menimpa yang lama)
+    const uploadUrl = await getSignedUrl(r2(), new PutObjectCommand({ Bucket: bucket(), Key: QRIS_KEY, ContentType: contentType }), { expiresIn: 900 });
+    res.json({ uploadUrl });
+  } catch (e) { fail(res, e, "Gagal membuat URL upload"); }
+});
+
+app.get("/api/admin/overview", needAdmin, needDb, needR2, async (req, res) => {
+  try {
+    const [pays, users, subs, hasQris] = await Promise.all([
+      db("GET", "ih_payments?status=in.(pending,approved,rejected)&select=id,username_lc,months,amount,proof_key,status,reason,created_at,decided_at&order=created_at.desc&limit=50"),
+      db("GET", "ih_users?select=username_lc,username,pass_hash,created_at&order=created_at.desc&limit=300"),
+      db("GET", "ih_subscriptions?select=username_lc,expires_at"),
+      exists(QRIS_KEY),
+    ]);
+    const names = new Map(users.map((u) => [u.username_lc, u.username]));
+    const until = new Map(subs.map((s) => [s.username_lc, s.expires_at]));
+    const payments = await Promise.all(pays.map(async (p) => ({
+      id: p.id, username: names.get(p.username_lc) || p.username_lc, months: p.months, amount: p.amount,
+      status: p.status, reason: p.reason, createdAt: p.created_at,
+      proofUrl: p.proof_key ? await signGet(p.proof_key, 3600) : null,
+    })));
+    res.json({
+      price: SITE.pricePerMonth,
+      qris: hasQris ? await signGet(QRIS_KEY, 3600) : null,
+      payments,
+      users: users.map((u) => ({ username: u.username, key: u.username_lc, hasPassword: !!u.pass_hash, premiumUntil: until.get(u.username_lc) || null })),
+    });
+  } catch (e) { fail(res, e, "Gagal memuat data pembayaran"); }
+});
+
+app.post("/api/admin/payments/:id/approve", needAdmin, needDb, async (req, res) => {
+  if (!UUID_RE.test(req.params.id)) return res.status(400).json({ error: "ID tidak valid" });
+  try {
+    const p = (await db("GET", `ih_payments?id=eq.${req.params.id}&select=id,username_lc,months,status`))[0];
+    if (!p || p.status !== "pending") return res.status(400).json({ error: "Pembayaran ini sudah diproses atau belum dikirim" });
+    const months = [1, 2, 3, 6, 12].includes(Number((req.body || {}).months)) ? Number(req.body.months) : p.months;
+    // perpanjang dari tanggal berakhir kalau masih aktif, selain itu dari sekarang
+    const cur = (await db("GET", `ih_subscriptions?username_lc=eq.${enc(p.username_lc)}&select=expires_at`))[0];
+    const base = cur && new Date(cur.expires_at) > new Date() ? new Date(cur.expires_at) : new Date();
+    const exp = new Date(base);
+    exp.setUTCMonth(exp.getUTCMonth() + months);
+    await db("POST", "ih_subscriptions?on_conflict=username_lc", { username_lc: p.username_lc, expires_at: exp.toISOString() }, "resolution=merge-duplicates,return=minimal");
+    await db("PATCH", `ih_payments?id=eq.${p.id}`, { status: "approved", months, decided_at: new Date().toISOString() }, "return=minimal");
+    await notify(p.username_lc, "Pembayaran disetujui", `Premium aktif sampai ${exp.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}.`);
+    res.json({ ok: true, expiresAt: exp.toISOString() });
+  } catch (e) { fail(res, e, "Gagal menyetujui"); }
+});
+
+app.post("/api/admin/payments/:id/reject", needAdmin, needDb, async (req, res) => {
+  if (!UUID_RE.test(req.params.id)) return res.status(400).json({ error: "ID tidak valid" });
+  const reason = String((req.body || {}).reason || "").trim().slice(0, 200);
+  try {
+    const p = (await db("GET", `ih_payments?id=eq.${req.params.id}&select=id,username_lc,status`))[0];
+    if (!p || p.status !== "pending") return res.status(400).json({ error: "Pembayaran ini sudah diproses atau belum dikirim" });
+    await db("PATCH", `ih_payments?id=eq.${p.id}`, { status: "rejected", reason: reason || null, decided_at: new Date().toISOString() }, "return=minimal");
+    await notify(p.username_lc, "Pembayaran ditolak", reason || "Bukti transfer tidak sesuai. Silakan kirim ulang.");
+    res.json({ ok: true });
+  } catch (e) { fail(res, e, "Gagal menolak"); }
+});
+
+app.post("/api/admin/users/:u/clear-password", needAdmin, needDb, async (req, res) => {
+  const u = String(req.params.u || "").toLowerCase();
+  if (!NAME_RE.test(u)) return res.status(400).json({ error: "Username tidak valid" });
+  try {
+    await db("PATCH", `ih_users?username_lc=eq.${enc(u)}`, { pass_hash: null }, "return=minimal");
+    res.json({ ok: true });
+  } catch (e) { fail(res, e, "Gagal menghapus password"); }
 });
 
 // Semua alamat lain → halaman tunggal (mis. /admin tetap membuka halaman yang sama)

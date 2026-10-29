@@ -1,9 +1,9 @@
 (function(){
   const $ = id => document.getElementById(id);
-  const NAME_KEY = "media_username", TOKEN_KEY = "admin_token", SEEN_KEY = "media_seen";
+  const NAME_KEY = "media_username", TOKEN_KEY = "admin_token", UKEY = "user_token", SEEN_KEY = "media_seen";
   const NAME_RE = /^[A-Za-z0-9_-]{2,30}$/;
-  let cfg = { title:"Indohub", subtitle:"", maxUploadMB:2048, adminUser:"kecap" };
-  let username = "", items = [], token = "", hls = null;
+  let cfg = { title:"Indohub", subtitle:"", maxUploadMB:2048, adminUser:"kecap", pricePerMonth:50000 };
+  let username = "", items = [], token = "", utoken = "", me = {}, srv = [], hls = null, forcePw = false, lastRef = 0;
   let tab = "home", openAlbum = null, albumItems = [], current = -1;
 
   const store = area => ({
@@ -12,6 +12,27 @@
     del(k){ try{ area.removeItem(k); }catch(e){} }
   });
   const ls = store(window.localStorage), ss = store(window.sessionStorage);
+  const rupiah = n => "Rp" + Number(n).toLocaleString("id-ID");
+  const fmtDate = d => new Date(d).toLocaleDateString("id-ID", { day:"numeric", month:"short", year:"numeric" });
+  // panggilan API: otomatis membawa token admin atau token user
+  async function api(path, body, method){
+    const o = { method: method || (body ? "POST" : "GET"), headers: {} };
+    const t = token || utoken; if (t) o.headers.Authorization = "Bearer " + t;
+    if (body){ o.headers["Content-Type"] = "application/json"; o.body = JSON.stringify(body); }
+    const r = await fetch(path, o); let d = {};
+    try{ d = await r.json(); }catch(e){}
+    return { ok: r.ok, status: r.status, d };
+  }
+  function putFile(url, file, type, onProg){
+    return new Promise((resolve, reject) => {
+      const x = new XMLHttpRequest();
+      x.open("PUT", url); x.setRequestHeader("Content-Type", type);
+      x.upload.onprogress = e => { if (e.lengthComputable && onProg) onProg(Math.round(e.loaded / e.total * 100)); };
+      x.onload = () => x.status >= 200 && x.status < 300 ? resolve() : reject(new Error("Upload ditolak R2 (kode " + x.status + ")"));
+      x.onerror = () => reject(new Error("Upload gagal. Periksa CORS R2: method PUT dan header Content-Type harus diizinkan."));
+      x.send(file);
+    });
+  }
   const isAdminName = v => v.trim().toLowerCase() === cfg.adminUser;
   const fmtSize = b => b >= 1073741824 ? (b/1073741824).toFixed(1)+" GB" : b >= 1048576 ? (b/1048576).toFixed(1)+" MB" : Math.max(1,Math.round(b/1024))+" KB";
   const ts = it => new Date(it.lastModified).getTime();
@@ -35,9 +56,9 @@
     return [...map.values()].sort((a,b) => b.latest - a.latest);
   }
   async function fetchItems(){
-    const r = await fetch("/api/list"); const d = await r.json();
-    if (!r.ok) throw new Error(d.error || "Gagal memuat daftar");
-    return d.items;
+    const r = await api("/api/list");
+    if (!r.ok) throw new Error(r.d.error || "Gagal memuat daftar");
+    return r.d.items;
   }
 
   /* ---------- pindah tampilan ---------- */
@@ -47,11 +68,23 @@
     $("admin").hidden = name !== "admin";
   }
   function showGate(){ closePlayer(false); view("gate"); $("username").focus(); }
-  function showApp(){
+  function applyMe(){
+    username = me.username || username;
     $("who").textContent = username; $("avatar").textContent = username.charAt(0);
-    view("app"); openAlbum = null; setTab("home"); loadItems();
+    $("premInfo").textContent = me.premiumUntil ? "Premium aktif sampai " + fmtDate(me.premiumUntil) : "Akun gratis";
+    $("pwToggle").textContent = me.hasPassword ? "Ganti password" : "Buat password";
+    $("pwCur").hidden = !me.hasPassword; $("pwCur").required = !!me.hasPassword;
+    if (tab === "premium" && !openAlbum) renderSubCard("premium");
   }
-  function showAdmin(){ view("admin"); loadAdmin(); }
+  function showApp(){
+    applyMe(); view("app"); openAlbum = null; setTab("home"); loadItems();
+  }
+  function showAdmin(){ view("admin"); loadAdmin(); loadPayAdmin(); }
+  function userExpired(){
+    ls.del(UKEY); utoken = ""; me = {}; srv = []; items = [];
+    $("username").value = ls.get(NAME_KEY); togglePw(false); showGate();
+    $("gateErr").textContent = "Sesi habis, silakan masuk lagi";
+  }
 
   /* ---------- tab bawah ---------- */
   const TABS = ["catalog","notif","profil"];
@@ -64,7 +97,8 @@
     });
     if (pane === "catalog"){ closeAlbum(false); renderAlbums(); }
     else closePlayer(false);
-    if (name === "notif"){ renderNotifs(); if (items.length) ls.set(SEEN_KEY, String(Math.max(...items.map(ts)))); updateDot(); }
+    if (name === "notif"){ renderNotifs(); if (latest()) ls.set(SEEN_KEY, String(latest())); updateDot(); }
+    if (name !== "home") refreshQuiet();
     window.scrollTo(0, 0);
   }
   document.querySelectorAll(".bottomnav button").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
@@ -74,6 +108,7 @@
   function renderAlbums(){
     const cat = tab === "premium" ? "premium" : "free";
     $("catTitle").textContent = cat === "premium" ? "Album premium" : "Album gratis";
+    renderSubCard(cat);
     const box = $("albums"); box.innerHTML = "";
     const list = albumsOf(cat);
     if (!list.length){
@@ -81,9 +116,10 @@
       return;
     }
     list.forEach(a => {
-      const b = el("button", "album"); b.type = "button";
+      const lk = a.list.every(i => i.locked);
+      const b = el("button", "album" + (lk ? " locked" : "")); b.type = "button";
       const ic = el("span", "folder"); ic.innerHTML = ICON_FOLDER; ic.style.setProperty("--h", hue(a.name.toLowerCase()));
-      b.append(ic, el("b", "", a.name), el("small", "", a.list.length + " video"));
+      b.append(ic, el("b", "", a.name), el("small", "", a.list.length + " video" + (lk ? " · terkunci" : "")));
       b.addEventListener("click", () => openAlbumView(cat, a.name));
       box.appendChild(b);
     });
@@ -91,9 +127,11 @@
 
   /* ---------- isi album: grid 2 kolom tanpa judul ---------- */
   function openAlbumView(cat, name, push){
+    const found = items.filter(i => i.category === cat && i.album.toLowerCase() === name.toLowerCase())
+                       .sort((a,b) => ts(a) - ts(b));
+    if (found.length && found.every(i => i.locked)){ openSheet(); return; }
     openAlbum = { cat, name };
-    albumItems = items.filter(i => i.category === cat && i.album.toLowerCase() === name.toLowerCase())
-                      .sort((a,b) => ts(a) - ts(b));
+    albumItems = found;
     $("albumView").hidden = true; $("watchView").hidden = false;
     $("crumb").textContent = CATNAME[cat] + " › " + name;
     renderList();
@@ -199,9 +237,16 @@
 
   async function loadItems(){
     $("albums").innerHTML = ""; $("albums").appendChild(el("p", "empty", "Memuat..."));
+    lastRef = Date.now();
+    try{
+      const sres = await api("/api/session");
+      if (sres.status === 401){ userExpired(); return; }
+      if (sres.ok){ me = sres.d.me; applyMe(); }
+    }catch(e){}
     try{ items = await fetchItems(); }
     catch(e){ items = []; $("albums").innerHTML = ""; $("albums").appendChild(el("p", "empty", e.message)); return; }
-    $("mediaCount").textContent = items.length + " media tersedia";
+    try{ const n = await api("/api/notifs"); srv = n.ok ? n.d.items : []; }catch(e){ srv = []; }
+    $("mediaCount").textContent = openItems().length + " media tersedia";
     if (!openAlbum && (tab === "home" || tab === "premium")) renderAlbums();
     updateDot();
   }
@@ -217,33 +262,40 @@
     return new Date(d).toLocaleDateString("id-ID", { day:"numeric", month:"short", year:"numeric" });
   }
   function updateDot(){
-    if (!items.length){ $("notifDot").hidden = true; return; }
-    if (!ls.get(SEEN_KEY)) ls.set(SEEN_KEY, String(Math.max(...items.map(ts)))); // kunjungan pertama: anggap sudah dilihat
-    const n = items.filter(it => ts(it) > seen()).length;
+    if (!openItems().length && !srv.length){ $("notifDot").hidden = true; return; }
+    if (!ls.get(SEEN_KEY)) ls.set(SEEN_KEY, String(latest())); // kunjungan pertama: anggap sudah dilihat
+    const n = openItems().filter(it => ts(it) > seen()).length + srv.filter(x => srvTs(x) > seen()).length;
     $("notifDot").hidden = !n || tab === "notif"; $("notifDot").textContent = n > 9 ? "9+" : n;
   }
+  const srvTs = n => new Date(n.created_at).getTime();
+  const openItems = () => items.filter(i => !i.locked);
+  const latest = () => Math.max(0, ...openItems().map(ts), ...srv.map(srvTs));
   function renderNotifs(){
     const ul = $("notifs"); ul.innerHTML = "";
-    if (!items.length){ ul.appendChild(el("li", "empty", "Belum ada notifikasi.")); return; }
     const last = seen();
-    items.slice(0, 20).forEach(it => {
-      const li = el("li", ts(it) > last ? "new" : "");
+    const feed = [
+      ...srv.map(n => ({ t: srvTs(n), title: n.title, sub: (n.body ? n.body + " · " : "") + relTime(n.created_at) })),
+      ...openItems().slice(0, 20).map(it => ({ t: ts(it), title: "Media baru: " + it.title,
+        sub: CATNAME[it.category] + " › " + it.album + " · " + relTime(it.lastModified) }))
+    ].sort((x, y) => y.t - x.t).slice(0, 30);
+    if (!feed.length){ ul.appendChild(el("li", "empty", "Belum ada notifikasi.")); return; }
+    feed.forEach(f => {
+      const li = el("li", f.t > last ? "new" : "");
       const ic = el("span", "ic"); ic.innerHTML = ICON_BELL;
       const box = el("div");
-      box.append(el("b", "", "Media baru: " + it.title),
-                 el("small", "", CATNAME[it.category] + " › " + it.album + " · " + relTime(it.lastModified)));
+      box.append(el("b", "", f.title), el("small", "", f.sub));
       li.append(ic, box); ul.appendChild(li);
     });
   }
 
   /* ---------- gate ---------- */
   function togglePw(focus){
-    const adm = isAdminName($("username").value);
-    $("pwBox").hidden = !adm; $("password").required = adm;
-    if (!adm) $("password").value = "";
-    if (adm && focus) $("password").focus();
+    const need = isAdminName($("username").value) || forcePw;
+    $("pwBox").hidden = !need; $("password").required = need;
+    if (!need) $("password").value = "";
+    if (need && focus) $("password").focus();
   }
-  $("username").addEventListener("input", () => togglePw(false));
+  $("username").addEventListener("input", () => { forcePw = false; togglePw(false); });
   $("gateForm").addEventListener("submit", async e => {
     e.preventDefault();
     const v = $("username").value.trim(), err = $("gateErr");
@@ -263,10 +315,19 @@
       finally{ btn.disabled = false; }
       return;
     }
-    username = v; ls.set(NAME_KEY, v); showApp();
+    const btn = $("gateBtn"); btn.disabled = true;
+    try{
+      const r = await api("/api/enter", { username: v, password: $("password").value });
+      if (r.d.needPassword){ forcePw = true; togglePw(true); err.textContent = r.d.error; $("password").select(); return; }
+      if (!r.ok) throw new Error(r.d.error || "Gagal masuk");
+      utoken = r.d.token; ls.set(UKEY, utoken); me = r.d.me; ls.set(NAME_KEY, me.username);
+      $("password").value = ""; forcePw = false; showApp();
+    }catch(ex){ err.textContent = ex.message; }
+    finally{ btn.disabled = false; }
   });
   $("logout").addEventListener("click", () => {
-    ls.del(NAME_KEY); username = ""; $("username").value = ""; togglePw(false); showGate();
+    ls.del(NAME_KEY); ls.del(UKEY); utoken = ""; me = {}; srv = []; items = []; forcePw = false;
+    username = ""; $("username").value = ""; togglePw(false); showGate();
   });
 
   /* ---------- dashboard admin: upload ---------- */
@@ -405,6 +466,198 @@
     }catch(ex){ $("aerr").textContent = ex.message; sync(); }
   });
 
+  /* ---------- kartu & modal berlangganan ---------- */
+  function renderSubCard(cat){
+    const c = $("subCard"); c.hidden = cat !== "premium"; if (cat !== "premium") return;
+    c.innerHTML = ""; c.classList.toggle("on", !!me.premiumUntil);
+    const t = el("div"), b = el("button", "btn", me.premiumUntil ? "Perpanjang" : "Berlangganan sekarang"); b.type = "button";
+    if (me.premiumUntil) t.append(el("b", "", "Premium aktif"), el("small", "", "Berlaku sampai " + fmtDate(me.premiumUntil)));
+    else t.append(el("b", "", "Buka semua album premium"), el("small", "", "Mulai " + rupiah(cfg.pricePerMonth) + " / bulan"));
+    b.addEventListener("click", openSheet);
+    c.append(t, b);
+  }
+
+  let pay = null, qrisLoaded = false;
+  const sheetErr = m => { $("sheetErr").textContent = m || ""; };
+  const monthVal = () => Number(document.querySelector("input[name=mon]:checked").value);
+  async function openSheet(){
+    sheetErr(""); pay = null; $("stepDone").hidden = true; $("proofFile").value = "";
+    $("sheet").hidden = false; document.body.classList.add("noscroll");
+    if (!me.hasPassword){ $("stepPay").hidden = true; $("stepPw").hidden = false; $("spw").focus(); return; }
+    $("stepPw").hidden = true; $("stepPay").hidden = false;
+    await Promise.all([loadQris(), startPay()]);
+  }
+  function closeSheet(){ $("sheet").hidden = true; document.body.classList.remove("noscroll"); }
+  async function loadQris(){
+    try{
+      const r = await api("/api/payment/info"); if (!r.ok) throw new Error(r.d.error || "Gagal memuat QRIS");
+      const q = $("qrisImg"); q.hidden = !r.d.qris; $("qrisNone").hidden = !!r.d.qris;
+      if (r.d.qris) q.src = r.d.qris;
+    }catch(e){ sheetErr(e.message); }
+  }
+  async function startPay(){
+    $("proofBtn").disabled = true; $("payAmount").textContent = "-"; pay = null;
+    try{
+      const r = await api("/api/payment/start", { months: monthVal() });
+      if (r.status === 401){ closeSheet(); userExpired(); return; }
+      if (r.d.needPassword){ me.hasPassword = false; applyMe(); $("stepPay").hidden = true; $("stepPw").hidden = false; return; }
+      if (!r.ok) throw new Error(r.d.error || "Gagal membuat tagihan");
+      pay = r.d; $("payAmount").textContent = rupiah(pay.amount); $("proofBtn").disabled = false; sheetErr("");
+    }catch(e){ sheetErr(e.message); }
+  }
+  document.querySelectorAll("input[name=mon]").forEach(r => r.addEventListener("change", startPay));
+  $("sheetClose").addEventListener("click", closeSheet);
+  $("sheetBg").addEventListener("click", closeSheet);
+  $("doneBtn").addEventListener("click", closeSheet);
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) closeSheet(); });
+
+  $("spwBtn").addEventListener("click", async () => {
+    const pw = $("spw").value;
+    if (pw.length < 6){ sheetErr("Password minimal 6 karakter"); return; }
+    $("spwBtn").disabled = true;
+    try{
+      const r = await api("/api/password", { password: pw });
+      if (!r.ok){ sheetErr(r.d.error || "Gagal menyimpan password"); return; }
+      me.hasPassword = true; applyMe(); $("spw").value = ""; sheetErr("");
+      $("stepPw").hidden = true; $("stepPay").hidden = false;
+      await Promise.all([loadQris(), startPay()]);
+    }finally{ $("spwBtn").disabled = false; }
+  });
+
+  $("proofBtn").addEventListener("click", async () => {
+    const f = $("proofFile").files[0], btn = $("proofBtn"), prog = $("proofProg"); sheetErr("");
+    if (!pay){ sheetErr("Tagihan belum siap, tunggu sebentar."); return; }
+    if (!f){ sheetErr("Pilih foto bukti transfer dulu."); return; }
+    if (!/^image\/(jpeg|png|webp)$/.test(f.type)){ sheetErr("Bukti harus berupa gambar JPG, PNG, atau WebP."); return; }
+    if (f.size > 5 * 1048576){ sheetErr("Ukuran gambar maksimal 5 MB."); return; }
+    btn.disabled = true; prog.hidden = false; prog.value = 0;
+    try{
+      const p = await api("/api/payment/" + pay.id + "/presign", { contentType: f.type, size: f.size });
+      if (p.status === 401){ closeSheet(); userExpired(); return; }
+      if (!p.ok) throw new Error(p.d.error || "Gagal memulai upload");
+      await putFile(p.d.uploadUrl, f, f.type, v => { prog.value = v; });
+      const r = await api("/api/payment/" + pay.id + "/submit", {});
+      if (!r.ok) throw new Error(r.d.error || "Gagal mengirim bukti");
+      pay = null; $("stepPay").hidden = true; $("stepDone").hidden = false; lastRef = 0;
+    }catch(e){ sheetErr(e.message); }
+    finally{ prog.hidden = true; btn.disabled = !pay; }
+  });
+
+  // segarkan status premium & notifikasi tanpa layar "Memuat..." (maks. tiap 15 detik)
+  async function refreshQuiet(){
+    if (Date.now() - lastRef < 15000 || !utoken) return; lastRef = Date.now();
+    try{
+      const s = await api("/api/session"); if (s.status === 401){ userExpired(); return; }
+      if (s.ok){ me = s.d.me; applyMe(); }
+      items = await fetchItems();
+      const n = await api("/api/notifs"); if (n.ok) srv = n.d.items;
+      $("mediaCount").textContent = openItems().length + " media tersedia";
+      if (!openAlbum && (tab === "home" || tab === "premium")) renderAlbums();
+      if (tab === "notif") renderNotifs();
+      updateDot();
+    }catch(e){}
+  }
+
+  /* ---------- profil: buat / ganti password ---------- */
+  $("pwToggle").addEventListener("click", () => {
+    $("pwForm").hidden = !$("pwForm").hidden; $("pwOk").textContent = "";
+    if (!$("pwForm").hidden) ($("pwCur").hidden ? $("pwNew") : $("pwCur")).focus();
+  });
+  $("pwForm").addEventListener("submit", async e => {
+    e.preventDefault(); const err = $("pwErr"); err.textContent = "";
+    const r = await api("/api/password", { password: $("pwNew").value, current: $("pwCur").value });
+    if (r.status === 401){ userExpired(); return; }
+    if (!r.ok){ err.textContent = r.d.error || "Gagal menyimpan password"; return; }
+    me.hasPassword = true; applyMe(); $("pwNew").value = ""; $("pwCur").value = "";
+    $("pwForm").hidden = true; $("pwOk").textContent = "Password tersimpan. Gunakan password ini saat masuk berikutnya.";
+  });
+
+  /* ---------- admin: pembayaran ---------- */
+  async function loadPayAdmin(){
+    try{
+      const r = await api("/api/admin/overview");
+      if (r.status === 401){ adminExpired(); return; }
+      if (!r.ok) throw new Error(r.d.error || "Gagal memuat data pembayaran");
+      $("priceTxt").textContent = rupiah(r.d.price);
+      const q = $("qrisPrev"); q.hidden = !r.d.qris; if (r.d.qris) q.src = r.d.qris;
+      renderPays(r.d.payments); renderUsers(r.d.users); $("payErr").textContent = "";
+    }catch(e){ $("payErr").textContent = e.message; }
+  }
+  async function decide(id, act, body){
+    const r = await api("/api/admin/payments/" + id + "/" + act, body || {});
+    if (r.status === 401){ adminExpired(); return; }
+    if (!r.ok){ $("payErr").textContent = r.d.error || "Gagal memproses"; return; }
+    loadPayAdmin();
+  }
+  const PSTAT = { pending:"Menunggu", approved:"Disetujui", rejected:"Ditolak" };
+  function renderPays(list){
+    const ul = $("payList"); ul.innerHTML = "";
+    if (!list.length){ ul.appendChild(el("li", "empty", "Belum ada bukti transfer.")); return; }
+    list.sort((a, b) => (a.status === "pending" ? 0 : 1) - (b.status === "pending" ? 0 : 1));
+    list.forEach(p => {
+      const li = el("li");
+      const a = el("a"); a.href = p.proofUrl || "#"; a.target = "_blank"; a.rel = "noopener";
+      const img = el("img"); img.alt = "Bukti " + p.username; img.loading = "lazy"; if (p.proofUrl) img.src = p.proofUrl; a.appendChild(img);
+      const mid = el("div"), nm = el("div", "name", p.username);
+      nm.append(" ", el("span", "pill " + p.status, PSTAT[p.status]));
+      mid.append(nm, el("div", "meta", rupiah(p.amount) + " · " + p.months + " bln · " + new Date(p.createdAt).toLocaleString("id-ID") + (p.reason ? " · " + p.reason : "")));
+      const acts = el("div", "pacts");
+      if (p.status === "pending"){
+        const sel = el("select"); sel.setAttribute("aria-label", "Durasi");
+        [1, 2, 3, 6, 12].forEach(m => { const o = el("option", "", m + " bln"); o.value = m; if (m === p.months) o.selected = true; sel.appendChild(o); });
+        const ok = el("button", "btn", "Setujui"); ok.type = "button";
+        ok.addEventListener("click", () => { ok.disabled = true; decide(p.id, "approve", { months: Number(sel.value) }); });
+        const no = el("button", "btn danger", "Tolak"); no.type = "button";
+        no.addEventListener("click", () => {
+          const reason = prompt("Alasan penolakan (boleh kosong):"); if (reason === null) return;
+          no.disabled = true; decide(p.id, "reject", { reason });
+        });
+        acts.append(sel, ok, no);
+      }
+      li.append(a, mid, acts); ul.appendChild(li);
+    });
+  }
+  function renderUsers(list){
+    const ul = $("userList"); ul.innerHTML = "";
+    if (!list.length){ ul.appendChild(el("li", "empty", "Belum ada pengguna.")); return; }
+    list.forEach(u => {
+      const li = el("li", "nothumb"), mid = el("div");
+      const active = u.premiumUntil && new Date(u.premiumUntil) > new Date();
+      mid.append(el("div", "name", u.username),
+        el("div", "meta", (active ? "Premium sampai " + fmtDate(u.premiumUntil) : "Gratis") + " · " + (u.hasPassword ? "pakai password" : "tanpa password")));
+      const acts = el("div", "pacts");
+      if (u.hasPassword){
+        const b = el("button", "btn ghost", "Hapus password"); b.type = "button";
+        b.addEventListener("click", async () => {
+          if (!confirm("Hapus password " + u.username + "? Akun bisa dimasuki hanya dengan username sampai user membuat password baru.")) return;
+          const r = await api("/api/admin/users/" + encodeURIComponent(u.key) + "/clear-password", {});
+          if (r.status === 401){ adminExpired(); return; }
+          if (!r.ok){ $("payErr").textContent = r.d.error || "Gagal menghapus password"; return; }
+          loadPayAdmin();
+        });
+        acts.appendChild(b);
+      }
+      li.append(mid, acts); ul.appendChild(li);
+    });
+  }
+  $("qrisBtn").addEventListener("click", async () => {
+    const f = $("qrisFile").files[0], err = $("qrisErr"), ok = $("qrisOk"), btn = $("qrisBtn");
+    err.textContent = ""; ok.textContent = "";
+    if (!f){ err.textContent = "Pilih gambar QRIS dulu."; return; }
+    if (!/^image\/(jpeg|png|webp)$/.test(f.type)){ err.textContent = "QRIS harus berupa gambar JPG, PNG, atau WebP."; return; }
+    if (f.size > 5 * 1048576){ err.textContent = "Ukuran gambar maksimal 5 MB."; return; }
+    btn.disabled = true;
+    try{
+      const p = await api("/api/payment/qris-presign", { contentType: f.type, size: f.size });
+      if (p.status === 401){ adminExpired(); return; }
+      if (!p.ok) throw new Error(p.d.error || "Gagal memulai upload");
+      await putFile(p.d.uploadUrl, f, f.type);
+      $("qrisFile").value = ""; ok.textContent = "QRIS tersimpan di payment/qris.jpg.";
+      loadPayAdmin();
+    }catch(e){ err.textContent = e.message; }
+    finally{ btn.disabled = false; }
+  });
+
   /* ---------- start ---------- */
   async function start(){
     try{ const r = await fetch("/api/config"); if (r.ok) cfg = Object.assign(cfg, await r.json()); }catch(e){}
@@ -419,8 +672,17 @@
       }catch(e){}
       ss.del(TOKEN_KEY); token = "";
     }
+    utoken = ls.get(UKEY);
+    if (utoken){
+      let r = null;
+      try{ r = await api("/api/session"); }catch(e){}
+      if (r && r.ok){ me = r.d.me; showApp(); return; }
+      if (!r || r.status !== 401){ me = { username: ls.get(NAME_KEY) }; showApp(); return; } // server/jaringan bermasalah: tetap masuk
+      ls.del(UKEY); utoken = "";
+    }
     const saved = ls.get(NAME_KEY);
-    if (NAME_RE.test(saved) && !isAdminName(saved)){ username = saved; showApp(); } else showGate();
+    if (NAME_RE.test(saved) && !isAdminName(saved)) $("username").value = saved;
+    showGate();
   }
   start();
 })();
