@@ -92,7 +92,7 @@
     <div class="sheet-box">
       <div class="grab" aria-hidden="true"></div>
       <button type="button" class="sclose" id="sheetClose" aria-label="Tutup">&times;</button>
-      <h2>Berlangganan Premium</h2>
+      <h2 id="sheetTitle">Berlangganan Premium</h2>
 
       <div id="stepPw" hidden>
         <p class="hint">Buat password dulu supaya akun premium kamu tidak bisa dipakai orang lain.</p>
@@ -115,6 +115,20 @@
         <input id="proofFile" type="file" accept="image/*">
         <progress id="proofProg" value="0" max="100" hidden></progress>
         <button class="btn" id="proofBtn" type="button" disabled>Kirim bukti</button>
+      </div>
+
+      <div id="stepDetail" hidden>
+        <p class="pstatus">Menunggu verifikasi</p>
+        <dl class="pdetail">
+          <div><dt>Paket</dt><dd id="dtMonths">-</dd></div>
+          <div><dt>Total transfer</dt><dd id="dtAmount">-</dd></div>
+          <div><dt>Dikirim</dt><dd id="dtDate">-</dd></div>
+        </dl>
+        <p class="hint">Foto bukti transfer</p>
+        <a id="dtProofLink" class="proofwrap" target="_blank" rel="noopener" hidden><img id="dtProof" alt="Bukti transfer"></a>
+        <p class="hint" id="dtProofNone" hidden>Foto bukti tidak bisa dimuat.</p>
+        <p class="hint">Admin sedang memeriksa pembayaranmu. Hasilnya muncul di tab Notifikasi.</p>
+        <button class="btn" id="dtClose" type="button">Tutup</button>
       </div>
 
       <div id="stepDone" hidden>

@@ -41,6 +41,7 @@
   const TABTITLE = { home:"Home", premium:"Premium", notif:"Notifikasi", profil:"Profil" };
 
   const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+  const ICON_LOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
   const ICON_AUDIO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>';
   const ICON_BELL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15L6 16z"/><path d="M10 21h4"/></svg>';
   const ICON_FOLDER = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H9l2 2.5h7.5A2.5 2.5 0 0 1 21 9v8.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5v-11z"/></svg>';
@@ -129,7 +130,6 @@
   function openAlbumView(cat, name, push){
     const found = items.filter(i => i.category === cat && i.album.toLowerCase() === name.toLowerCase())
                        .sort((a,b) => ts(a) - ts(b));
-    if (found.length && found.every(i => i.locked)){ openSheet(); return; }
     openAlbum = { cat, name };
     albumItems = found;
     $("albumView").hidden = true; $("watchView").hidden = false;
@@ -169,7 +169,18 @@
     albumItems.forEach((it, i) => {
       const li = el("li"), b = el("button", "tile"); b.type = "button";
       b.setAttribute("aria-label", "Putar " + it.title);
-      if (it.type === "audio"){
+      if (it.locked){
+        b.classList.add("locked");
+        b.setAttribute("aria-label", it.title + " (terkunci, khusus premium)");
+        if (it.thumb){
+          const im = document.createElement("img");
+          im.src = it.thumb; im.alt = ""; im.loading = "lazy"; im.setAttribute("aria-hidden", "true");
+          b.appendChild(im);
+        } else if (it.type === "audio"){
+          b.classList.add("is-audio");
+          const ic = el("span", "tic"); ic.innerHTML = ICON_AUDIO; b.appendChild(ic);
+        }
+      } else if (it.type === "audio"){
         b.classList.add("is-audio");
         const ic = el("span", "tic"); ic.innerHTML = ICON_AUDIO; b.appendChild(ic);
       } else {
@@ -180,11 +191,11 @@
         b.appendChild(v);
         if (thumbObserver) thumbObserver.observe(v); else v.src = v.dataset.src;
       }
-      const play = el("span", "tplay"); play.innerHTML = ICON_PLAY;
+      const play = el("span", "tplay"); play.innerHTML = it.locked ? ICON_LOCK : ICON_PLAY;
       const num = el("span", "tnum", String(i + 1));
       const dur = el("span", "tdur", "");
       b.append(play, num, dur);
-      b.addEventListener("click", () => openPlayer(i));
+      b.addEventListener("click", () => { if (it.locked) openSheet(); else openPlayer(i); });
       li.appendChild(b); list.appendChild(li);
     });
   }
@@ -358,6 +369,28 @@
     return same ? same.name : typed;
   }
 
+  // ambil 1 frame dari video lokal (di browser admin) sebagai gambar JPEG kecil
+  function makeThumb(file){
+    return new Promise(resolve => {
+      const url = URL.createObjectURL(file), v = document.createElement("video");
+      let done = false;
+      const end = blob => { if (done) return; done = true; URL.revokeObjectURL(url); v.removeAttribute("src"); v.load(); resolve(blob); };
+      v.muted = true; v.playsInline = true; v.preload = "auto";
+      v.onloadedmetadata = () => { v.currentTime = Math.min(1, (v.duration || 2) * 0.1); };
+      v.onseeked = () => {
+        try{
+          const w = 480, h = Math.round(w * (v.videoHeight || 270) / (v.videoWidth || 480));
+          const c = document.createElement("canvas"); c.width = w; c.height = h;
+          c.getContext("2d").drawImage(v, 0, 0, w, h);
+          c.toBlob(b => end(b), "image/jpeg", 0.75);
+        }catch(e){ end(null); }
+      };
+      v.onerror = () => end(null);
+      setTimeout(() => end(null), 15000);
+      v.src = url;
+    });
+  }
+
   $("uploadBtn").addEventListener("click", async () => {
     const f = $("file").files[0], err = $("upErr"), ok = $("upOk"), prog = $("prog"), btn = $("uploadBtn");
     err.textContent = ""; ok.textContent = "";
@@ -387,6 +420,19 @@
         x.onerror = () => reject(new Error("Upload gagal. Periksa CORS R2: method PUT dan header Content-Type harus diizinkan."));
         x.send(f);
       });
+      if (type.startsWith("video/")){
+        try{
+          const blob = await makeThumb(f);
+          if (blob){
+            const tr = await fetch("/api/presign-thumb", {
+              method: "POST", headers: {"Content-Type":"application/json","Authorization":"Bearer "+token},
+              body: JSON.stringify({ key: d.key })
+            });
+            const td = await tr.json();
+            if (tr.ok) await fetch(td.uploadUrl, { method: "PUT", headers: {"Content-Type":"image/jpeg"}, body: blob });
+          }
+        }catch(e){ /* thumbnail gagal tidak membatalkan upload */ }
+      }
       ok.textContent = "Upload selesai: " + f.name + " → " + CATNAME[category] + " › " + d.album;
       $("file").value = "";
       await loadAdmin(d.album);
@@ -470,6 +516,14 @@
   function renderSubCard(cat){
     const c = $("subCard"); c.hidden = cat !== "premium"; if (cat !== "premium") return;
     c.innerHTML = ""; c.classList.toggle("on", !!me.premiumUntil);
+    if (me.pending){
+      c.classList.remove("on"); c.classList.add("waiting");
+      const t = el("div"), b = el("button", "btn", "Detail selengkapnya"); b.type = "button";
+      t.append(el("b", "", "Menunggu verifikasi"), el("small", "", "Bukti transfer " + rupiah(me.pending.amount) + " sedang diperiksa admin"));
+      b.addEventListener("click", openDetail);
+      c.append(t, b); return;
+    }
+    c.classList.remove("waiting");
     const t = el("div"), b = el("button", "btn", me.premiumUntil ? "Perpanjang" : "Berlangganan sekarang"); b.type = "button";
     if (me.premiumUntil) t.append(el("b", "", "Premium aktif"), el("small", "", "Berlaku sampai " + fmtDate(me.premiumUntil)));
     else t.append(el("b", "", "Buka semua album premium"), el("small", "", "Mulai " + rupiah(cfg.pricePerMonth) + " / bulan"));
@@ -480,8 +534,37 @@
   let pay = null, qrisLoaded = false;
   const sheetErr = m => { $("sheetErr").textContent = m || ""; };
   const monthVal = () => Number(document.querySelector("input[name=mon]:checked").value);
+  const fmtDateTime = d => new Date(d).toLocaleString("id-ID", { day:"numeric", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" });
+  const refreshSubCard = () => renderSubCard(tab === "premium" ? "premium" : "free");
+  async function openDetail(){
+    sheetErr(""); pay = null;
+    ["stepPw", "stepPay", "stepDone"].forEach(id => { $(id).hidden = true; });
+    $("sheetTitle").textContent = "Detail pembayaran";
+    $("stepDetail").hidden = false; $("sheet").hidden = false; document.body.classList.add("noscroll");
+    const p0 = me.pending;
+    $("dtMonths").textContent = p0 ? p0.months + " bulan" : "-";
+    $("dtAmount").textContent = p0 ? rupiah(p0.amount) : "-";
+    $("dtDate").textContent = p0 ? fmtDateTime(p0.createdAt) : "-";
+    $("dtProofLink").hidden = true; $("dtProofNone").hidden = true;
+    try{
+      const r = await api("/api/payment/pending");
+      if (r.status === 401){ closeSheet(); userExpired(); return; }
+      if (!r.ok) throw new Error(r.d.error || "Gagal memuat detail pembayaran");
+      const p = r.d.payment;
+      if (!p){ // sudah diproses admin: tutup & segarkan status
+        me.pending = null; closeSheet(); refreshSubCard(); lastRef = 0; return;
+      }
+      $("dtMonths").textContent = p.months + " bulan";
+      $("dtAmount").textContent = rupiah(p.amount);
+      $("dtDate").textContent = fmtDateTime(p.createdAt);
+      if (p.proofUrl){ $("dtProof").src = p.proofUrl; $("dtProofLink").href = p.proofUrl; $("dtProofLink").hidden = false; }
+      else $("dtProofNone").hidden = false;
+    }catch(e){ sheetErr(e.message); }
+  }
   async function openSheet(){
-    sheetErr(""); pay = null; $("stepDone").hidden = true; $("proofFile").value = "";
+    if (me.pending){ openDetail(); return; } // sudah kirim bukti: jangan buat tagihan baru
+    sheetErr(""); pay = null; $("stepDone").hidden = true; $("stepDetail").hidden = true; $("proofFile").value = "";
+    $("sheetTitle").textContent = "Berlangganan Premium";
     $("sheet").hidden = false; document.body.classList.add("noscroll");
     if (!me.hasPassword){ $("stepPay").hidden = true; $("stepPw").hidden = false; $("spw").focus(); return; }
     $("stepPw").hidden = true; $("stepPay").hidden = false;
@@ -509,6 +592,7 @@
   $("sheetClose").addEventListener("click", closeSheet);
   $("sheetBg").addEventListener("click", closeSheet);
   $("doneBtn").addEventListener("click", closeSheet);
+  $("dtClose").addEventListener("click", closeSheet);
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) closeSheet(); });
 
   $("spwBtn").addEventListener("click", async () => {
@@ -538,7 +622,8 @@
       await putFile(p.d.uploadUrl, f, f.type, v => { prog.value = v; });
       const r = await api("/api/payment/" + pay.id + "/submit", {});
       if (!r.ok) throw new Error(r.d.error || "Gagal mengirim bukti");
-      pay = null; $("stepPay").hidden = true; $("stepDone").hidden = false; lastRef = 0;
+      me.pending = { id: pay.id, months: pay.months, amount: pay.amount, createdAt: new Date().toISOString() };
+      pay = null; $("stepPay").hidden = true; $("stepDone").hidden = false; lastRef = 0; refreshSubCard();
     }catch(e){ sheetErr(e.message); }
     finally{ prog.hidden = true; btn.disabled = !pay; }
   });

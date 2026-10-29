@@ -257,3 +257,21 @@ small{color:var(--muted)}
 .pill.pending{background:#6b7785}
 .pill.rejected{background:var(--err)}
 @media (max-width:560px){.plist li{grid-template-columns:auto 1fr}.plist li.nothumb{grid-template-columns:1fr}.pacts{grid-column:1/-1}}
+
+/* tile terkunci: thumbnail terlihat, video tidak bisa diputar */
+.tile img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;background:#0d141b}
+.tile.locked{background:linear-gradient(135deg,#1b2733,#0d141b)}
+.tile.locked img{filter:brightness(.55)}
+.tile.locked .tplay{background:rgba(0,0,0,.65)}
+.tile.locked .tplay svg{margin-left:0}
+
+/* kartu "Menunggu verifikasi" + modal detail pembayaran */
+.subcard.waiting{background:linear-gradient(135deg,#7a4a00,#d98a00)}
+.pstatus{display:inline-block;margin:2px 0 12px;padding:4px 12px;border-radius:999px;background:#fff3d6;color:#7a4a00;font:700 .85rem/1.4 "Source Sans 3",sans-serif}
+.pdetail{margin:0 0 14px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.pdetail div{display:flex;justify-content:space-between;gap:12px;padding:10px 14px;border-top:1px solid var(--line)}
+.pdetail div:first-child{border-top:0}
+.pdetail dt{color:var(--muted)}
+.pdetail dd{margin:0;font-weight:600;text-align:right}
+.proofwrap{display:block;margin:6px 0 14px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--bg)}
+.proofwrap img{display:block;width:100%;max-height:50vh;object-fit:contain}

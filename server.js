@@ -44,9 +44,17 @@ async function premiumUntil(u) {
   return d && new Date(d) > new Date() ? d : null;
 }
 async function meInfo(u) {
-  const [users, until] = await Promise.all([db("GET", `ih_users?username_lc=eq.${enc(u)}&select=username,pass_hash`), premiumUntil(u)]);
+  const [users, until, pend] = await Promise.all([
+    db("GET", `ih_users?username_lc=eq.${enc(u)}&select=username,pass_hash`),
+    premiumUntil(u),
+    db("GET", `ih_payments?username_lc=eq.${enc(u)}&status=eq.pending&select=id,months,amount,created_at&order=created_at.desc&limit=1`),
+  ]);
   if (!users[0]) return null;
-  return { username: users[0].username, hasPassword: !!users[0].pass_hash, premiumUntil: until };
+  const p = pend[0];
+  return {
+    username: users[0].username, hasPassword: !!users[0].pass_hash, premiumUntil: until,
+    pending: p ? { id: p.id, months: p.months, amount: p.amount, createdAt: p.created_at } : null,
+  };
 }
 const notify = (u, title, body) => db("POST", "ih_notifications", { username_lc: u, title, body }, "return=minimal");
 
@@ -161,6 +169,7 @@ app.get("/api/list", needR2, async (req, res) => {
     if (!member && t && t.k === "user") member = !!(await premiumUntil(t.u));
 
     const lists = await Promise.all(["free/", "premium/", "uploads/"].map(listPrefix));
+    const thumbKeys = new Set((await listPrefix("thumbs/")).map((o) => o.Key));
     const items = lists.flat()
       .filter((o) => VIDEO.test(o.Key) || AUDIO.test(o.Key))
       .map((o) => {
@@ -182,8 +191,11 @@ app.get("/api/list", needR2, async (req, res) => {
 
     // Premium hanya diberi link kalau member aktif (atau admin); yang lain hanya melihat daftar terkunci
     await Promise.all(items.map(async (it) => {
-      if (it.category === "premium" && !member) it.locked = true;
-      else it.url = await signGet(it.key);
+      if (it.category === "premium" && !member) {
+        it.locked = true; // link video TIDAK diberikan; hanya thumbnail (gambar) kalau ada
+        const tk = `thumbs/${it.key}.jpg`;
+        if (thumbKeys.has(tk)) it.thumb = await signGet(tk);
+      } else it.url = await signGet(it.key);
     }));
     res.setHeader("Cache-Control", "no-store");
     res.json({ items, premium: member });
@@ -215,6 +227,19 @@ app.post("/api/presign", needAdmin, needR2, async (req, res) => {
   }
 });
 
+// thumbnail video disimpan terpisah di thumbs/<key-video>.jpg supaya video premium tetap tidak bocor
+app.post("/api/presign-thumb", needAdmin, needR2, async (req, res) => {
+  const key = (req.body && req.body.key) || "";
+  if (typeof key !== "string" || !/^(free|premium)\/[^/]+\/[^/]+$/.test(key) || key.includes("..") || !VIDEO.test(key))
+    return res.status(400).json({ error: "Key video tidak valid" });
+  try {
+    const uploadUrl = await getSignedUrl(r2(), new PutObjectCommand({ Bucket: bucket(), Key: `thumbs/${key}.jpg`, ContentType: "image/jpeg" }), { expiresIn: 900 });
+    res.json({ uploadUrl });
+  } catch (e) {
+    res.status(500).json({ error: "Gagal membuat URL thumbnail" });
+  }
+});
+
 app.post("/api/delete", needAdmin, needR2, async (req, res) => {
   const keys = (req.body && req.body.keys) || [];
   if (!Array.isArray(keys) || !keys.length || keys.length > 1000)
@@ -222,7 +247,9 @@ app.post("/api/delete", needAdmin, needR2, async (req, res) => {
   if (!keys.every((k) => typeof k === "string" && /^(free|premium|uploads)\//.test(k) && !k.includes("..")))
     return res.status(400).json({ error: "Hanya file di folder free/, premium/ atau uploads/ yang boleh dihapus" });
   try {
-    await r2().send(new DeleteObjectsCommand({ Bucket: bucket(), Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true } }));
+    const all = keys.concat(keys.filter((k) => !k.startsWith("uploads/")).map((k) => `thumbs/${k}.jpg`));
+    for (let i = 0; i < all.length; i += 1000)
+      await r2().send(new DeleteObjectsCommand({ Bucket: bucket(), Delete: { Objects: all.slice(i, i + 1000).map((Key) => ({ Key })), Quiet: true } }));
     res.json({ deleted: keys.length });
   } catch (e) {
     res.status(500).json({ error: "Gagal menghapus file" });
@@ -289,6 +316,20 @@ app.post("/api/payment/:id/submit", needUser, needDb, needR2, async (req, res) =
     await db("PATCH", `ih_payments?id=eq.${p.id}`, { status: "pending" }, "return=minimal");
     res.json({ ok: true });
   } catch (e) { fail(res, e, "Gagal mengirim bukti"); }
+});
+
+// detail pembayaran yang sedang menunggu verifikasi (termasuk foto bukti milik user itu sendiri)
+app.get("/api/payment/pending", needUser, needDb, needR2, async (req, res) => {
+  try {
+    const rows = await db("GET", `ih_payments?username_lc=eq.${enc(req.user)}&status=eq.pending&select=id,months,amount,proof_key,created_at&order=created_at.desc&limit=1`);
+    const p = rows[0];
+    if (!p) return res.json({ payment: null });
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ payment: {
+      id: p.id, months: p.months, amount: p.amount, createdAt: p.created_at,
+      proofUrl: p.proof_key ? await signGet(p.proof_key, 3600) : null,
+    } });
+  } catch (e) { fail(res, e, "Gagal memuat detail pembayaran"); }
 });
 
 /* ---------- pembayaran: sisi admin ---------- */
