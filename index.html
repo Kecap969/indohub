@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/style.css?v=2">
+<link rel="stylesheet" href="/style.css?v=3">
 </head>
 <body>
 
@@ -86,7 +86,11 @@
       <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
     <div class="vcover" id="cover" aria-hidden="true"></div>
-    <video id="player" controls playsinline preload="metadata"></video>
+    <video id="player" playsinline preload="metadata" disablepictureinpicture></video>
+    <div class="vtap" id="vtap" role="button" aria-label="Ketuk untuk putar atau jeda, geser untuk ganti video"></div>
+    <div class="vfx vfx-c" id="fxC" aria-hidden="true"></div>
+    <div class="vfx vfx-l" id="fxL" aria-hidden="true">&laquo; 10 dtk</div>
+    <div class="vfx vfx-r" id="fxR" aria-hidden="true">10 dtk &raquo;</div>
     <div class="vrail" id="vrail">
       <button type="button" class="rbtn" id="likeBtn" aria-pressed="false" aria-label="Suka">
         <span class="ric"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-9.2-9.3C1.6 7.9 3.5 4.5 7 4.5c2 0 3.5 1.1 5 3 1.5-1.9 3-3 5-3 3.5 0 5.4 3.4 4.2 6.7-1.7 4.7-9.2 9.3-9.2 9.3z"/></svg></span>
@@ -195,6 +199,6 @@
   </nav>
 </div>
 
-<script src="/app.js"></script>
+<script src="/app.js?v=3"></script>
 </body>
 </html>
