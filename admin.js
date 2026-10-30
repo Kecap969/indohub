@@ -123,18 +123,29 @@
   function renderHome(){
     const pend = pendingCount();
     const albums = new Set(items.map(i => i.category + "/" + i.album.toLowerCase())).size;
+    const S = p => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + p + '</svg>';
+    const IC = {
+      file: S('<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M10 9.5v5l4.5-2.5z"/>'),
+      disk: S('<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>'),
+      album: S('<path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H9l2 2.5h7.5A2.5 2.5 0 0 1 21 9v8.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5v-11z"/>'),
+      users: S('<circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 5.2a3.4 3.4 0 0 1 0 6.6"/><path d="M18.5 14.8c1.6.8 2.7 2.4 3 5.2"/>'),
+      crown: S('<path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5L3 8z"/>'),
+      clock: S('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+    };
     const cards = [
-      ["File", items.length, () => setTab("media")],
-      ["Total ukuran", fmtSize(items.reduce((a, i) => a + i.size, 0)), () => setTab("media")],
-      ["Album", albums, () => setTab("media")],
-      ["Pengguna", users.length, () => { F.user = "all"; renderUsers(); setTab("users"); }],
-      ["Premium aktif", users.filter(isActive).length, () => { F.user = "premium"; renderUsers(); setTab("users"); }],
-      ["Menunggu verifikasi", pend, () => goPay("pending")],
+      ["File", items.length, () => setTab("media"), IC.file, "#2f5bff"],
+      ["Total ukuran", fmtSize(items.reduce((a, i) => a + i.size, 0)), () => setTab("media"), IC.disk, "#7b5cff"],
+      ["Album", albums, () => setTab("media"), IC.album, "#0e9aa7"],
+      ["Pengguna", users.length, () => { F.user = "all"; renderUsers(); setTab("users"); }, IC.users, "#2f8f5b"],
+      ["Premium aktif", users.filter(isActive).length, () => { F.user = "premium"; renderUsers(); setTab("users"); }, IC.crown, "#b7791f"],
+      ["Menunggu verifikasi", pend, () => goPay("pending"), IC.clock, "#d98a00"],
     ];
     const box = $("homeStats"); box.innerHTML = "";
-    cards.forEach(([label, val, go]) => {
+    cards.forEach(([label, val, go, icon, color]) => {
       const b = el("button", "astat" + (label === "Menunggu verifikasi" && pend ? " hot" : "")); b.type = "button";
-      b.append(el("b", "", String(val)), el("span", "", label));
+      b.style.setProperty("--c", color);
+      const ic = el("span", "aic"); ic.innerHTML = icon; ic.setAttribute("aria-hidden", "true");
+      b.append(ic, el("b", "", String(val)), el("span", "", label));
       b.addEventListener("click", go); box.appendChild(b);
     });
     $("todoCard").hidden = !pend;
@@ -344,6 +355,9 @@
             });
             acts.append(open, cp);
           }
+          const mv = el("button", "mv", it.category === "free" ? "Ke Premium" : "Ke Gratis"); mv.type = "button";
+          mv.addEventListener("click", () => openMove([it.key], it.category === "free" ? "premium" : "free"));
+          acts.appendChild(mv);
           li.append(cb, mid, acts); ul.appendChild(li);
         });
       });
@@ -365,6 +379,61 @@
       if (!r.ok) throw new Error(d.error || "Gagal menghapus");
       await loadMedia();
     }catch(ex){ $("aerr").textContent = ex.message; sync(); }
+  });
+
+  /* ---------- pindahkan file (Gratis <-> Premium) ---------- */
+  let mvKeys = [];
+  const mvCat = () => document.querySelector("input[name=mvcat]:checked").value;
+  const itemOf = k => items.find(i => i.key === k) || {};
+  function mvToggle(){
+    const prem = mvCat() === "premium";
+    $("mvAlbumBox").hidden = !prem; $("mvFreeNote").hidden = prem;
+    $("mvNew").hidden = $("mvAlbum").value !== NEW;
+  }
+  function mvFillAlbums(){
+    const sel = $("mvAlbum"), names = albumsOf("premium").map(a => a.name);
+    sel.innerHTML = "";
+    names.forEach(n => { const o = el("option", "", n); o.value = n; sel.appendChild(o); });
+    const o = el("option", "", "+ Buat album baru"); o.value = NEW; sel.appendChild(o);
+    if (!names.length) sel.value = NEW;
+    mvToggle();
+  }
+  function openMove(keys, dest){
+    if (!keys.length) return;
+    mvKeys = keys; $("mvErr").textContent = "";
+    const cats = new Set(keys.map(k => itemOf(k).category));
+    dest = dest || (cats.size === 1 && cats.has("premium") ? "free" : "premium");
+    document.querySelector("input[name=mvcat][value=" + dest + "]").checked = true;
+    $("mvTitle").textContent = keys.length > 1 ? "Pindahkan " + keys.length + " file" : "Pindahkan file";
+    $("mvInfo").textContent = keys.length === 1 ? (itemOf(keys[0]).title || "") : "Pilih tujuan untuk file yang dipilih.";
+    $("mvNew").value = ""; mvFillAlbums();
+    $("mvSheet").hidden = false; document.body.classList.add("noscroll");
+  }
+  function closeMove(){ $("mvSheet").hidden = true; document.body.classList.remove("noscroll"); }
+  document.querySelectorAll("input[name=mvcat]").forEach(r => r.addEventListener("change", mvToggle));
+  $("mvAlbum").addEventListener("change", () => { mvToggle(); if (!$("mvNew").hidden) $("mvNew").focus(); });
+  $("mvBtn").addEventListener("click", () => openMove(selected().map(c => c.dataset.key)));
+  $("mvClose").addEventListener("click", closeMove);
+  $("mvBg").addEventListener("click", closeMove);
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("mvSheet").hidden) closeMove(); });
+  $("mvGo").addEventListener("click", async () => {
+    const dest = mvCat(), err = $("mvErr"), btn = $("mvGo"); err.textContent = "";
+    let album = "";
+    if (dest === "premium"){
+      album = $("mvAlbum").value === NEW ? $("mvNew").value.replace(/[^\p{L}\p{N} _-]/gu, "").replace(/\s+/g, " ").trim() : $("mvAlbum").value;
+      if (album.length < 2){ err.textContent = "Isi nama album (minimal 2 karakter)."; $("mvNew").focus(); return; }
+      const same = albumsOf("premium").find(a => a.name.toLowerCase() === album.toLowerCase()); if (same) album = same.name;
+    }
+    const keys = dest === "free" ? mvKeys.filter(k => itemOf(k).category !== "free") : mvKeys;
+    if (!keys.length){ err.textContent = "File yang dipilih sudah ada di Gratis."; return; }
+    btn.disabled = true; btn.textContent = "Memindahkan...";
+    try{
+      const r = await api("/api/move", { keys, category: dest, album });
+      if (r.status === 401){ adminExpired(); return; }
+      if (!r.ok) throw new Error(r.d.error || "Gagal memindahkan");
+      closeMove(); await loadMedia();
+    }catch(e){ err.textContent = e.message; loadMedia(); }
+    finally{ btn.disabled = false; btn.textContent = "Pindahkan"; }
   });
 
   /* ---------- pembayaran ---------- */

@@ -499,3 +499,95 @@ button,a,input,select,summary,label{touch-action:manipulation}
 /* Home: grid video gratis tanpa folder */
 .vgrid.flat .tnum{display:none}
 .vgrid .skeltile{aspect-ratio:1/1;border-radius:16px;background:var(--line);animation:pulse 1.3s ease-in-out infinite}
+
+/* ===== dashboard admin: tampilan profesional ===== */
+#admin{--aside:244px;padding-bottom:calc(104px + env(safe-area-inset-bottom,0px))}
+#admin .atop{position:sticky;top:0;z-index:20;padding:calc(14px + env(safe-area-inset-top,0px)) clamp(16px,4vw,32px) 14px;
+  background:var(--bg);border-bottom:1px solid var(--line)}
+#admin .atop h1{font-size:1.4rem;letter-spacing:-.02em}
+#admin .atop .btn{border-radius:10px;padding:7px 14px;font-size:.92rem}
+#admin .wrap{max-width:1040px;padding:22px clamp(16px,4vw,32px) 8px}
+#admin .ah{display:flex;align-items:center;gap:10px;margin:26px 0 12px;font-size:1.08rem}
+#admin .ah::before{content:"";width:4px;height:18px;border-radius:2px;background:var(--accent)}
+
+/* kartu statistik */
+#admin .astats{grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:12px;margin-bottom:16px}
+#admin .astat{gap:3px;padding:16px;border-radius:16px;box-shadow:var(--shadow);transition:transform .15s var(--ease),border-color .15s}
+#admin .astat:hover{transform:translateY(-2px)}
+#admin .astat .aic{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;margin-bottom:8px;
+  color:var(--c,var(--accent));background:color-mix(in srgb,var(--c,var(--accent)) 14%,transparent)}
+#admin .astat .aic svg{width:20px;height:20px}
+#admin .astat b{font-size:1.55rem;letter-spacing:-.02em}
+#admin .astat.hot .aic{color:#fff;background:rgba(255,255,255,.22)}
+#admin .astat.hot span:not(.aic){color:rgba(255,255,255,.92)}
+
+/* kartu & daftar */
+#admin .acard{border-radius:16px;box-shadow:var(--shadow);padding:16px 18px}
+#admin .acard.todo{border-color:#d98a00;background:color-mix(in srgb,#d98a00 8%,var(--surface))}
+#admin .alist,#admin .plist{border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+#admin .alist li,#admin .plist li{padding:13px 18px;transition:background-color .12s}
+#admin .alist li:not(.grp):not(.empty):hover,#admin .plist li:not(.empty):hover{background:color-mix(in srgb,var(--accent) 5%,transparent)}
+#admin .alist .grp{padding:11px 18px;background:color-mix(in srgb,var(--accent) 8%,var(--surface));border-bottom:1px solid var(--line)}
+#admin .alist .grp b{font-size:.98rem}
+#admin .alist li.grp+li{border-top:0}
+#admin .alist input[type=checkbox]{width:18px;height:18px;border-radius:5px}
+#admin .name{letter-spacing:-.005em}
+#admin .acts{flex-wrap:wrap;justify-content:flex-end}
+#admin .acts a,#admin .acts button{border-radius:9px;padding:6px 12px;font-weight:600;font-size:.86rem;transition:border-color .12s,color .12s,background-color .12s}
+#admin .acts a:hover,#admin .acts button:hover{border-color:var(--accent);color:var(--accent)}
+#admin .acts .mv{border-color:color-mix(in srgb,var(--accent) 40%,var(--line));color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+#admin .plist img{width:64px;height:64px;border-radius:10px}
+#admin .pacts .btn,#admin .pacts select{border-radius:10px}
+#admin .tools input[type=search]{height:44px;border-radius:12px;padding:0 14px;box-shadow:var(--shadow)}
+#admin .chip{padding:8px 16px}
+#admin .empty{padding:26px 18px;text-align:center}
+#admin .nfform select,#admin .nfform input,#admin .nfform textarea{border-radius:12px}
+#admin .albumrow select,#admin .albumrow input[type=text]{border-radius:10px;height:42px}
+
+/* bar aksi saat file dipilih */
+.selbar{z-index:31;left:12px;right:12px;max-width:560px;bottom:calc(96px + env(safe-area-inset-bottom,0px));border-radius:16px;padding:10px 12px 10px 16px}
+.selact{display:flex;gap:8px}
+.selact .btn{padding:9px 16px;border-radius:10px;font-size:.92rem}
+
+/* jendela "Pindahkan" */
+.mvlbl{display:block;margin:14px 0 6px;font-weight:700}
+#mvSheet .hint{margin:0;word-break:break-word}
+#mvSheet select,#mvSheet input[type=text]{width:100%;height:48px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);margin:0 0 10px;font:inherit}
+#mvSheet select:focus,#mvSheet input[type=text]:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 20%,transparent)}
+#mvSheet .btn{margin-top:8px}
+
+/* navbar admin: pil melayang di HP (sama dengan navbar pengguna) */
+#admin .abrand{display:none}
+#admin .bottomnav{left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));max-width:440px;margin:0 auto;gap:2px;padding:6px;
+  border:1px solid color-mix(in srgb,var(--line) 70%,transparent);border-radius:28px;background:color-mix(in srgb,var(--surface) 88%,transparent);
+  -webkit-backdrop-filter:blur(18px) saturate(1.4);backdrop-filter:blur(18px) saturate(1.4);
+  box-shadow:0 12px 32px rgba(15,25,35,.16),0 2px 6px rgba(15,25,35,.08)}
+@media (prefers-color-scheme:dark){#admin .bottomnav{box-shadow:0 12px 32px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.35)}}
+#admin .bottomnav button{min-height:56px;gap:4px;padding:8px 2px 6px;border-radius:22px;font-size:.7rem;letter-spacing:.01em}
+#admin .bottomnav button svg{width:23px;height:23px;stroke-width:1.7}
+#admin .bottomnav button:hover{color:var(--ink);background:color-mix(in srgb,var(--ink) 5%,transparent)}
+#admin .bottomnav button[aria-current="page"]{color:var(--accent-ink);background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 62%,#7b5cff));
+  box-shadow:0 6px 16px color-mix(in srgb,var(--accent) 38%,transparent)}
+#admin .bottomnav button[aria-current="page"] svg{stroke-width:2.1}
+#admin .bottomnav .dot{top:5px;left:calc(50% + 6px);box-shadow:0 0 0 2px var(--surface)}
+
+/* desktop: sidebar kiri */
+@media (min-width:900px){
+  #admin{padding-left:var(--aside);padding-bottom:40px}
+  #admin .bottomnav{top:0;bottom:0;left:0;right:auto;width:var(--aside);max-width:none;margin:0;padding:22px 14px;border:0;border-right:1px solid var(--line);border-radius:0;
+    grid-auto-flow:row;grid-auto-columns:auto;grid-auto-rows:min-content;align-content:start;gap:4px;background:var(--surface);
+    box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}
+  #admin .abrand{display:flex;align-items:center;gap:12px;padding:2px 10px 22px;margin-bottom:6px;border-bottom:1px solid var(--line)}
+  #admin .abrand .logo{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,#2f5bff,#7b5cff);
+    box-shadow:0 6px 16px color-mix(in srgb,var(--accent) 36%,transparent)}
+  #admin .abrand .logo svg{width:18px;height:18px;margin-left:2px}
+  #admin .abrand b{display:block;font:800 1.1rem/1.15 "Bricolage Grotesque",system-ui,sans-serif;letter-spacing:-.02em}
+  #admin .abrand small{display:block;color:var(--muted);font-size:.78rem}
+  #admin .bottomnav button{flex-direction:row;justify-content:flex-start;gap:12px;min-height:46px;padding:0 14px;border-radius:12px;font-size:.95rem}
+  #admin .bottomnav button[aria-current="page"]{box-shadow:0 6px 14px color-mix(in srgb,var(--accent) 30%,transparent)}
+  #admin .bottomnav .dot{position:static;margin-left:auto;box-shadow:none}
+  #admin .atop{padding-inline:32px}
+  .selbar{left:calc(var(--aside) + 28px);right:28px;bottom:24px;max-width:620px;margin:0}
+  #admin .astats{grid-template-columns:repeat(3,1fr)}
+}
+@media (min-width:1280px){#admin .astats{grid-template-columns:repeat(6,1fr)}}

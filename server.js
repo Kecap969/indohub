@@ -3,7 +3,7 @@
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
-const { PutObjectCommand, GetObjectCommand, HeadObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } = require("@aws-sdk/client-s3");
+const { PutObjectCommand, GetObjectCommand, HeadObjectCommand, ListObjectsV2Command, DeleteObjectsCommand, CopyObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 const {
@@ -264,6 +264,46 @@ app.post("/api/delete", needAdmin, needR2, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: "Gagal menghapus file" });
   }
+});
+
+// Pindahkan file antar kategori/album (R2 tidak punya "move": salin dulu, lalu hapus yang lama; thumbnail ikut)
+const copyObj = (from, to) => r2().send(new CopyObjectCommand({
+  Bucket: bucket(), Key: to, CopySource: `${bucket()}/${from.split("/").map(enc).join("/")}`, MetadataDirective: "COPY",
+}));
+app.post("/api/move", needAdmin, needR2, async (req, res) => {
+  const { keys, category, album } = req.body || {};
+  if (!Array.isArray(keys) || !keys.length || keys.length > 200)
+    return res.status(400).json({ error: "Daftar file tidak valid (maksimal 200 sekaligus)" });
+  if (!keys.every((k) => typeof k === "string" && /^(free|premium|uploads)\/.+/.test(k) && !k.includes("..") && (VIDEO.test(k) || AUDIO.test(k))))
+    return res.status(400).json({ error: "Hanya file media di folder free/, premium/ atau uploads/ yang bisa dipindahkan" });
+  if (category !== "free" && category !== "premium") return res.status(400).json({ error: "Pilih tujuan Gratis atau Premium" });
+  const albumName = category === "free" ? "Umum" : cleanAlbum(album);
+  if (albumName.length < 2) return res.status(400).json({ error: "Nama album minimal 2 karakter (huruf, angka, spasi, - atau _)" });
+
+  const moves = [...new Set(keys)].map((k) => ({ from: k, to: `${category}/${albumName}/${k.split("/").pop()}` })).filter((m) => m.from !== m.to);
+  if (!moves.length) return res.json({ moved: 0 });
+  const done = [];
+  let err = null;
+  try {
+    for (let i = 0; i < moves.length; i += 5) {
+      await Promise.all(moves.slice(i, i + 5).map(async (m) => {
+        await copyObj(m.from, m.to);
+        m.thumb = false;
+        if (!m.from.startsWith("uploads/") && (await exists(`thumbs/${m.from}.jpg`))) {
+          try { await copyObj(`thumbs/${m.from}.jpg`, `thumbs/${m.to}.jpg`); m.thumb = true; } catch (e) { /* thumbnail lama dibiarkan */ }
+        }
+        done.push(m);
+      }));
+    }
+  } catch (e) { err = e; }
+  try {
+    // hapus hanya file asal yang sudah berhasil disalin
+    const del = done.flatMap((m) => [m.from, ...(m.thumb ? [`thumbs/${m.from}.jpg`] : [])]);
+    for (let i = 0; i < del.length; i += 1000)
+      await r2().send(new DeleteObjectsCommand({ Bucket: bucket(), Delete: { Objects: del.slice(i, i + 1000).map((Key) => ({ Key })), Quiet: true } }));
+  } catch (e) { err = err || e; }
+  if (err) return res.status(500).json({ error: `Hanya ${done.length} dari ${moves.length} file yang berhasil dipindahkan. Coba lagi.` });
+  res.json({ moved: done.length });
 });
 
 /* ---------- pembayaran: sisi user ---------- */
