@@ -684,3 +684,7 @@ button,a,input,select,summary,label{touch-action:manipulation}
 @keyframes vnext{from{transform:translateY(40px);opacity:.25}to{transform:none;opacity:1}}
 @keyframes vprev{from{transform:translateY(-40px);opacity:.25}to{transform:none;opacity:1}}
 @keyframes vedge{50%{transform:scale(.97)}}
+
+/* v4: indikator memuat (jaringan lambat tidak lagi tampak seperti layar kosong) */
+.boot{position:fixed;inset:0;z-index:50;display:grid;place-items:center;pointer-events:none;color:#8a97a6;font:600 .95rem system-ui,sans-serif}
+.boot[hidden]{display:none}

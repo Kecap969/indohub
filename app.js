@@ -737,23 +737,25 @@
   });
 
   /* ---------- start ---------- */
+  const within = (p, ms) => Promise.race([p, new Promise(res => setTimeout(() => res(null), ms))]); // null bila kelamaan
   async function start(){
-    try{ const r = await fetch("/api/config"); if (r.ok) cfg = Object.assign(cfg, await r.json()); }catch(e){}
+    try{ const r = await within(fetch("/api/config"), 2500); if (r && r.ok) cfg = Object.assign(cfg, await r.json()); }catch(e){}
     document.title = cfg.title;
     $("gateTitle").textContent = cfg.title; $("gateSub").textContent = cfg.subtitle;
 
     token = ss.get(TOKEN_KEY);
     if (token){
       try{
-        const r = await fetch("/api/me", { headers:{ Authorization:"Bearer "+token } });
-        if (r.ok){ showAdmin(); return; }
+        const r = await within(fetch("/api/me", { headers:{ Authorization:"Bearer "+token } }), 8000);
+        if (r && r.ok){ showAdmin(); return; }
+        if (!r){ showGate(); return; } // jaringan terlalu lambat: jangan hapus sesi admin
       }catch(e){}
       ss.del(TOKEN_KEY); token = "";
     }
     utoken = ls.get(UKEY);
     if (utoken){
       let r = null;
-      try{ r = await api("/api/session"); }catch(e){}
+      try{ r = await within(api("/api/session"), 8000); }catch(e){}
       if (r && r.ok){ me = r.d.me; showApp(); return; }
       if (!r || r.status !== 401){ me = { username: ls.get(NAME_KEY) }; showApp(); return; } // server/jaringan bermasalah: tetap masuk
       ls.del(UKEY); utoken = "";
@@ -763,5 +765,5 @@
     showGate();
     const note = ss.get("gate_msg"); if (note){ ss.del("gate_msg"); $("gateErr").textContent = note; }
   }
-  start();
+  start().finally(() => { const b = $("boot"); if (b) b.hidden = true; });
 })();
