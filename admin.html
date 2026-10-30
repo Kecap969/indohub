@@ -56,12 +56,33 @@
                 <p class="err" id="upErr" role="alert"></p>
         <p class="hint" id="upOk" style="margin:6px 0 0"></p>
       </details>
-      <div class="achips" id="mediaChips" role="group" aria-label="Filter kategori"></div>
-      <div class="tools">
-        <input type="search" id="q" placeholder="Cari judul atau album">
-        <label><input type="checkbox" id="all"> Pilih semua</label>
+      <!-- daftar folder -->
+      <div id="folderView">
+        <div class="achips" id="mediaChips" role="group" aria-label="Filter kategori"></div>
+        <div class="tools"><input type="search" id="q" placeholder="Cari folder atau judul file"></div>
+        <div class="folders" id="folders"></div>
       </div>
-      <ul class="alist" id="alist"></ul>
+
+      <!-- isi satu folder -->
+      <div id="fileView" hidden>
+        <div class="fhead">
+          <button class="btn ghost" id="fBack" type="button">&larr; Semua folder</button>
+          <div class="ftitle">
+            <h2><span id="fName"></span> <span id="fPill" class="pill"></span></h2>
+            <small id="fMeta"></small>
+          </div>
+        </div>
+        <div class="fbar">
+          <button class="btn" id="fUp" type="button">Upload ke folder ini</button>
+          <button class="btn ghost" id="fRename" type="button">Ganti nama</button>
+          <button class="btn ghost warn" id="fDel" type="button">Hapus folder</button>
+        </div>
+        <div class="tools">
+          <input type="search" id="fq" placeholder="Cari di folder ini">
+          <label><input type="checkbox" id="all"> Pilih semua</label>
+        </div>
+        <ul class="alist" id="alist"></ul>
+      </div>
     </section>
 
     <!-- Pembayaran -->

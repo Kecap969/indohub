@@ -313,57 +313,128 @@
     });
     const all = checks(); $("all").checked = all.length > 0 && all.every(c => c.checked);
   }
+  /* ----- tampilan folder: kartu per folder, klik untuk melihat & mengelola isinya ----- */
+  let openFolder = null; // { cat, key (nama album huruf kecil), name }
+  const hue = s => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+  const ICON_FOLDER = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H9l2 2.5h7.5A2.5 2.5 0 0 1 21 9v8.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5v-11z"/></svg>';
+  const folderItems = f => items.filter(i => i.category === f.cat && i.album.toLowerCase() === f.key);
+  function foldersOf(){
+    const map = new Map();
+    items.forEach(i => {
+      const k = i.category + "/" + i.album.toLowerCase();
+      if (!map.has(k)) map.set(k, { cat: i.category, key: i.album.toLowerCase(), name: i.album, list: [], latest: 0, size: 0 });
+      const f = map.get(k); f.list.push(i); f.latest = Math.max(f.latest, ts(i)); f.size += i.size;
+    });
+    return [...map.values()].sort((a, b) => b.latest - a.latest);
+  }
   function renderMedia(){
-    const q = $("q").value.trim().toLowerCase();
-    const cnt = c => items.filter(i => c === "all" || i.category === c).length;
+    if (openFolder && !folderItems(openFolder).length) openFolder = null; // folder sudah kosong: kembali ke daftar folder
+    $("folderView").hidden = !!openFolder; $("fileView").hidden = !openFolder;
+    if (openFolder) renderFiles(); else renderFolders();
+  }
+  function renderFolders(){
+    $("alist").innerHTML = ""; sync();
+    const q = $("q").value.trim().toLowerCase(), all = foldersOf();
+    const cnt = c => all.filter(f => c === "all" || f.cat === c).length;
     chips($("mediaChips"), [
       { v:"all", t:"Semua", n:cnt("all") }, { v:"free", t:"Gratis", n:cnt("free") }, { v:"premium", t:"Premium", n:cnt("premium") }
     ], F.media, v => { F.media = v; renderMedia(); });
-
-    const shown = items.filter(i => (F.media === "all" || i.category === F.media) &&
-      (!q || i.title.toLowerCase().includes(q) || i.album.toLowerCase().includes(q)));
+    const list = all.filter(f => (F.media === "all" || f.cat === F.media) &&
+      (!q || f.name.toLowerCase().includes(q) || f.list.some(i => i.title.toLowerCase().includes(q))));
+    const box = $("folders"); box.innerHTML = "";
+    if (!list.length){ box.appendChild(el("p", "empty", all.length ? "Tidak ada folder yang cocok." : "Belum ada media. Upload dulu lewat kartu di atas.")); return; }
+    list.forEach(f => {
+      const b = el("button", "fcard"); b.type = "button";
+      b.setAttribute("aria-label", "Buka folder " + f.name + ", " + CATNAME[f.cat] + ", " + f.list.length + " file");
+      const ic = el("span", "ficon"); ic.innerHTML = ICON_FOLDER; ic.style.setProperty("--h", hue(f.name.toLowerCase())); ic.setAttribute("aria-hidden", "true");
+      b.append(el("span", "pill " + f.cat, CATNAME[f.cat]), ic, el("b", "", f.name), el("small", "", f.list.length + " file · " + fmtSize(f.size)));
+      b.addEventListener("click", () => { openFolder = { cat: f.cat, key: f.key, name: f.name }; $("fq").value = ""; renderMedia(); window.scrollTo(0, 0); });
+      box.appendChild(b);
+    });
+  }
+  function renderFiles(){
+    const f = openFolder, all = folderItems(f), keep = new Set(selected().map(c => c.dataset.key));
+    $("fName").textContent = f.name;
+    $("fPill").className = "pill " + f.cat; $("fPill").textContent = CATNAME[f.cat];
+    $("fMeta").textContent = all.length + " file · " + fmtSize(all.reduce((s, i) => s + i.size, 0));
+    $("fRename").hidden = f.cat !== "premium"; // folder gratis adalah folder internal
+    const q = $("fq").value.trim().toLowerCase();
+    const list = all.filter(i => !q || i.title.toLowerCase().includes(q)).sort((a, b) => ts(b) - ts(a));
     const ul = $("alist"); ul.innerHTML = "";
-    if (!shown.length){
-      const li = el("li", "empty", items.length ? "Tidak ada file yang cocok." : "Belum ada media."); li.style.display = "block";
-      ul.appendChild(li); sync(); return;
-    }
-    ["free", "premium"].forEach(cat => {
-      const inCat = shown.filter(i => i.category === cat); if (!inCat.length) return;
-      const byAlbum = new Map();
-      inCat.forEach(i => { const k = i.album.toLowerCase(); if (!byAlbum.has(k)) byAlbum.set(k, { name: i.album, list: [] }); byAlbum.get(k).list.push(i); });
-      byAlbum.forEach((a, k) => {
-        const gk = cat + "/" + k;
-        const gh = el("li", "grp");
-        const hc = el("input"); hc.type = "checkbox"; hc.dataset.gh = gk; hc.setAttribute("aria-label", "Pilih semua di album " + a.name);
-        hc.addEventListener("change", () => { checks().filter(c => c.dataset.grp === gk).forEach(c => { c.checked = hc.checked; }); sync(); });
-        gh.append(hc, el("span", "pill " + cat, CATNAME[cat]), el("b", "", a.name),
-          el("small", "", a.list.length + " file · " + fmtSize(a.list.reduce((s, i) => s + i.size, 0))));
-        ul.appendChild(gh);
-        a.list.forEach(it => {
-          const li = el("li");
-          const cb = el("input"); cb.type = "checkbox"; cb.dataset.key = it.key; cb.dataset.grp = gk; cb.setAttribute("aria-label", "Pilih " + it.title);
-          cb.addEventListener("change", sync);
-          const mid = el("div");
-          mid.append(el("div", "name", it.title), el("div", "meta", (it.type === "audio" ? "Audio" : "Video") + " · " + fmtSize(it.size) + " · " + fmtDateTime(it.lastModified)));
-          const acts = el("div", "acts");
-          if (it.url){
-            const open = el("a", "", "Buka"); open.href = it.url; open.target = "_blank"; open.rel = "noopener";
-            const cp = el("button", "", "Salin link"); cp.type = "button";
-            cp.addEventListener("click", async () => {
-              try{ await navigator.clipboard.writeText(it.url); cp.textContent = "Tersalin"; setTimeout(() => cp.textContent = "Salin link", 1500); }
-              catch(e){ prompt("Salin link:", it.url); }
-            });
-            acts.append(open, cp);
-          }
-          const mv = el("button", "mv", it.category === "free" ? "Ke Premium" : "Ke Gratis"); mv.type = "button";
-          mv.addEventListener("click", () => openMove([it.key], it.category === "free" ? "premium" : "free"));
-          acts.appendChild(mv);
-          li.append(cb, mid, acts); ul.appendChild(li);
+    if (!list.length){ const li = el("li", "empty", "Tidak ada file yang cocok."); li.style.display = "block"; ul.appendChild(li); sync(); return; }
+    list.forEach(it => {
+      const li = el("li");
+      const cb = el("input"); cb.type = "checkbox"; cb.dataset.key = it.key; cb.checked = keep.has(it.key); cb.setAttribute("aria-label", "Pilih " + it.title);
+      cb.addEventListener("change", sync);
+      const mid = el("div");
+      mid.append(el("div", "name", it.title), el("div", "meta", (it.type === "audio" ? "Audio" : "Video") + " · " + fmtSize(it.size) + " · " + fmtDateTime(it.lastModified)));
+      const acts = el("div", "acts");
+      if (it.url){
+        const open = el("a", "", "Buka"); open.href = it.url; open.target = "_blank"; open.rel = "noopener";
+        const cp = el("button", "", "Salin link"); cp.type = "button";
+        cp.addEventListener("click", async () => {
+          try{ await navigator.clipboard.writeText(it.url); cp.textContent = "Tersalin"; setTimeout(() => cp.textContent = "Salin link", 1500); }
+          catch(e){ prompt("Salin link:", it.url); }
         });
-      });
+        acts.append(open, cp);
+      }
+      const mv = el("button", "mv", it.category === "free" ? "Ke Premium" : "Ke Gratis"); mv.type = "button";
+      mv.addEventListener("click", () => openMove([it.key], it.category === "free" ? "premium" : "free"));
+      acts.appendChild(mv);
+      li.append(cb, mid, acts); ul.appendChild(li);
     });
     sync();
   }
+
+  // aksi folder
+  async function moveAll(keys, category, album){
+    for (let i = 0; i < keys.length; i += 200){
+      const r = await api("/api/move", { keys: keys.slice(i, i + 200), category, album });
+      if (r.status === 401){ adminExpired(); throw new Error("Sesi habis"); }
+      if (!r.ok) throw new Error(r.d.error || "Gagal memindahkan");
+    }
+  }
+  $("fBack").addEventListener("click", () => { openFolder = null; renderMedia(); window.scrollTo(0, 0); });
+  $("fq").addEventListener("input", renderMedia);
+  $("fUp").addEventListener("click", () => {
+    const f = openFolder; if (!f) return;
+    document.querySelector("input[name=cat][value=" + f.cat + "]").checked = true;
+    refreshAlbumChoices();
+    if (f.cat === "premium"){ const o = [...$("albumSel").options].find(o => o.value.toLowerCase() === f.key); if (o){ $("albumSel").value = o.value; toggleNew(); } }
+    $("upDetails").open = true; $("upDetails").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  $("fRename").addEventListener("click", async () => {
+    const f = openFolder; if (!f) return;
+    const typed = prompt("Nama baru folder:", f.name); if (typed === null) return;
+    let name = typed.replace(/[^\p{L}\p{N} _-]/gu, "").replace(/\s+/g, " ").trim();
+    if (name.length < 2){ $("aerr").textContent = "Nama folder minimal 2 karakter (huruf, angka, spasi, - atau _)."; window.scrollTo(0, 0); return; }
+    if (name === f.name) return;
+    const other = foldersOf().find(x => x.cat === "premium" && x.key === name.toLowerCase() && x.key !== f.key);
+    if (other){ if (!confirm('Folder "' + other.name + '" sudah ada. Gabungkan isi folder ini ke sana?')) return; name = other.name; }
+    $("aerr").textContent = ""; $("fRename").disabled = true;
+    try{
+      await moveAll(folderItems(f).map(i => i.key), "premium", name);
+      openFolder = { cat: "premium", key: name.toLowerCase(), name };
+    }catch(e){ $("aerr").textContent = e.message; window.scrollTo(0, 0); }
+    finally{ $("fRename").disabled = false; }
+    await loadMedia();
+  });
+  $("fDel").addEventListener("click", async () => {
+    const f = openFolder; if (!f) return;
+    const keys = folderItems(f).map(i => i.key);
+    if (!confirm('Hapus folder "' + f.name + '" beserta ' + keys.length + " file di dalamnya secara permanen? Tindakan ini tidak bisa dibatalkan.")) return;
+    $("aerr").textContent = ""; $("fDel").disabled = true;
+    try{
+      for (let i = 0; i < keys.length; i += 1000){
+        const r = await api("/api/delete", { keys: keys.slice(i, i + 1000) });
+        if (r.status === 401){ adminExpired(); return; }
+        if (!r.ok) throw new Error(r.d.error || "Gagal menghapus");
+      }
+      openFolder = null;
+    }catch(e){ $("aerr").textContent = e.message; window.scrollTo(0, 0); }
+    finally{ $("fDel").disabled = false; }
+    await loadMedia();
+  });
   $("all").addEventListener("change", e => { checks().forEach(c => { c.checked = e.target.checked; }); sync(); });
   $("q").addEventListener("input", renderMedia);
   $("del").addEventListener("click", async () => {
