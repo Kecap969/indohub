@@ -199,6 +199,22 @@ app.get("/api/list", needR2, async (req, res) => {
       .filter(Boolean)
       .sort((x, y) => new Date(y.lastModified) - new Date(x.lastModified));
 
+    // Tayangan, like, dan komentar per video (gagal memuat statistik tidak boleh menggagalkan daftar)
+    const stats = new Map();
+    if (!dbMissing().length) {
+      try {
+        const rows = await db("POST", "rpc/ih_media_stats", { uname: t && t.k === "user" ? t.u : null });
+        (rows || []).forEach((r) => stats.set(r.video_key, r));
+      } catch (e) { console.error("Statistik media gagal dimuat:", e.message); }
+    }
+    items.forEach((it) => {
+      const s = stats.get(it.key) || {};
+      it.views = Number(s.views) || 0;
+      it.likes = Number(s.likes) || 0;
+      it.comments = Number(s.comments) || 0;
+      it.liked = !!s.liked;
+    });
+
     // Premium hanya diberi link kalau member aktif (atau admin); yang lain hanya melihat daftar terkunci
     await Promise.all(items.map(async (it) => {
       if (it.category === "premium" && !member) {
@@ -212,6 +228,98 @@ app.get("/api/list", needR2, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: "Gagal memuat daftar media" });
   }
+});
+
+/* ---------- interaksi: tayangan, like, komentar ---------- */
+const MEDIA_KEY_RE = /^(free|premium|uploads)\/[^/].*$/;
+const validMediaKey = (k) =>
+  typeof k === "string" && k.length <= 300 && MEDIA_KEY_RE.test(k) && !k.includes("..") && (VIDEO.test(k) || AUDIO.test(k));
+// Pastikan video valid, ada di penyimpanan, dan (kalau premium) pengguna adalah member aktif
+async function mediaGate(req, res) {
+  const key = String((req.body && req.body.key) || req.query.key || "");
+  if (!validMediaKey(key)) { res.status(400).json({ error: "Video tidak valid" }); return null; }
+  if (key.startsWith("premium/") && !(await premiumUntil(req.user))) {
+    res.status(403).json({ error: "Khusus member premium" }); return null;
+  }
+  if (!(await exists(key))) { res.status(404).json({ error: "Video tidak ditemukan" }); return null; }
+  return key;
+}
+const commentRows = (key) =>
+  db("GET", `ih_comments?video_key=eq.${enc(key)}&select=id,body,created_at,username_lc,ih_users(username)&order=created_at.desc&limit=100`);
+const commentOut = (c, me) => ({
+  id: c.id, body: c.body, createdAt: c.created_at,
+  username: (c.ih_users && c.ih_users.username) || c.username_lc,
+  mine: !!me && c.username_lc === me,
+});
+
+app.post("/api/media/view", needUser, needDb, needR2, async (req, res) => {
+  try {
+    const key = await mediaGate(req, res); if (!key) return;
+    const n = await db("POST", "rpc/ih_record_view", { k: key, u: req.user });
+    res.json({ views: Number(n) || 0 });
+  } catch (e) { fail(res, e, "Gagal mencatat tayangan"); }
+});
+
+app.post("/api/media/like", needUser, needDb, needR2, async (req, res) => {
+  try {
+    const key = await mediaGate(req, res); if (!key) return;
+    const r = ((await db("POST", "rpc/ih_toggle_like", { k: key, u: req.user })) || [])[0] || {};
+    res.json({ liked: !!r.is_liked, likes: Number(r.like_count) || 0 });
+  } catch (e) { fail(res, e, "Gagal memproses like"); }
+});
+
+app.get("/api/media/comments", needUser, needDb, needR2, async (req, res) => {
+  try {
+    const key = await mediaGate(req, res); if (!key) return;
+    const rows = await commentRows(key);
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ items: rows.map((c) => commentOut(c, req.user)) });
+  } catch (e) { fail(res, e, "Gagal memuat komentar"); }
+});
+
+app.post("/api/media/comment", needUser, needDb, needR2, async (req, res) => {
+  const body = String((req.body || {}).body || "").replace(/\s+/g, " ").trim();
+  if (!body) return res.status(400).json({ error: "Komentar tidak boleh kosong" });
+  if (body.length > 300) return res.status(400).json({ error: "Komentar maksimal 300 karakter" });
+  try {
+    const key = await mediaGate(req, res); if (!key) return;
+    // batas kirim: maksimal 5 komentar per menit per pengguna
+    const since = new Date(Date.now() - 60000).toISOString();
+    const recent = await db("GET", `ih_comments?username_lc=eq.${enc(req.user)}&created_at=gte.${enc(since)}&select=id`);
+    if (recent.length >= 5) return res.status(429).json({ error: "Terlalu cepat, tunggu sebentar lalu coba lagi" });
+    const row = (await db("POST", "ih_comments", { video_key: key, username_lc: req.user, body }))[0];
+    const u = (await db("GET", `ih_users?username_lc=eq.${enc(req.user)}&select=username`))[0];
+    res.json({ comment: { id: row.id, body: row.body, createdAt: row.created_at, username: (u && u.username) || req.user, mine: true } });
+  } catch (e) { fail(res, e, "Gagal mengirim komentar"); }
+});
+
+// pengguna hanya boleh menghapus komentarnya sendiri
+app.post("/api/media/comment/:id/delete", needUser, needDb, async (req, res) => {
+  if (!UUID_RE.test(req.params.id)) return res.status(400).json({ error: "ID tidak valid" });
+  try {
+    const rows = await db("DELETE", `ih_comments?id=eq.${req.params.id}&username_lc=eq.${enc(req.user)}&select=id`);
+    if (!rows || !rows.length) return res.status(404).json({ error: "Komentar tidak ditemukan" });
+    res.json({ ok: true });
+  } catch (e) { fail(res, e, "Gagal menghapus komentar"); }
+});
+
+// moderasi admin: lihat & hapus komentar siapa pun
+app.get("/api/admin/comments", needAdmin, needDb, async (req, res) => {
+  const key = String(req.query.key || "");
+  if (!validMediaKey(key)) return res.status(400).json({ error: "Video tidak valid" });
+  try {
+    const rows = await commentRows(key);
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ items: rows.map((c) => commentOut(c, null)) });
+  } catch (e) { fail(res, e, "Gagal memuat komentar"); }
+});
+app.post("/api/admin/comments/:id/delete", needAdmin, needDb, async (req, res) => {
+  if (!UUID_RE.test(req.params.id)) return res.status(400).json({ error: "ID tidak valid" });
+  try {
+    const rows = await db("DELETE", `ih_comments?id=eq.${req.params.id}&select=id`);
+    if (!rows || !rows.length) return res.status(404).json({ error: "Komentar tidak ditemukan" });
+    res.json({ ok: true });
+  } catch (e) { fail(res, e, "Gagal menghapus komentar"); }
 });
 
 /* ---------- admin: upload & hapus media ---------- */
@@ -260,6 +368,9 @@ app.post("/api/delete", needAdmin, needR2, async (req, res) => {
     const all = keys.concat(keys.filter((k) => !k.startsWith("uploads/")).map((k) => `thumbs/${k}.jpg`));
     for (let i = 0; i < all.length; i += 1000)
       await r2().send(new DeleteObjectsCommand({ Bucket: bucket(), Delete: { Objects: all.slice(i, i + 1000).map((Key) => ({ Key })), Quiet: true } }));
+    if (!dbMissing().length) { // hapus juga like, komentar, tayangan milik video ini
+      try { await db("POST", "rpc/ih_drop_media", { keys }); } catch (e) { console.error("Gagal membersihkan data interaksi:", e.message); }
+    }
     res.json({ deleted: keys.length });
   } catch (e) {
     res.status(500).json({ error: "Gagal menghapus file" });
@@ -296,6 +407,10 @@ app.post("/api/move", needAdmin, needR2, async (req, res) => {
       }));
     }
   } catch (e) { err = e; }
+  if (done.length && !dbMissing().length) { // like, komentar, tayangan ikut ke key baru
+    try { await db("POST", "rpc/ih_move_media", { moves: done.map((m) => ({ from: m.from, to: m.to })) }); }
+    catch (e) { console.error("Gagal memindahkan data interaksi:", e.message); }
+  }
   try {
     // hapus hanya file asal yang sudah berhasil disalin
     const del = done.flatMap((m) => [m.from, ...(m.thumb ? [`thumbs/${m.from}.jpg`] : [])]);

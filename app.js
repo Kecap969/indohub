@@ -46,6 +46,13 @@
   const ICON_AUDIO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>';
   const ICON_BELL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15L6 16z"/><path d="M10 21h4"/></svg>';
   const ICON_FOLDER = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H9l2 2.5h7.5A2.5 2.5 0 0 1 21 9v8.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5v-11z"/></svg>';
+  const ICON_EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7S18.5 19 12 19 1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  // 1.234 -> "1,2 rb", 1.500.000 -> "1,5 jt"
+  const fmtCount = n => {
+    n = Number(n) || 0;
+    const f = (v, u) => (v >= 10 ? Math.round(v) : Math.round(v * 10) / 10).toString().replace(".", ",") + " " + u;
+    return n >= 1e6 ? f(n / 1e6, "jt") : n >= 1e3 ? f(n / 1e3, "rb") : String(n);
+  };
 
   /* ---------- data: kelompokkan per kategori & album ---------- */
   function albumsOf(cat){
@@ -159,6 +166,7 @@
   let skipPop = false; // history.back() yang kita panggil sendiri tidak boleh menutup album juga
   window.addEventListener("popstate", () => {
     if (skipPop){ skipPop = false; return; }
+    if (!$("cSheet").hidden){ hideComments(); return; }
     if (!$("viewer").hidden){ closePlayer(false); return; }
     if (openAlbum){ closeAlbum(false); renderAlbums(); }
   });
@@ -207,7 +215,10 @@
         if (thumbObserver) thumbObserver.observe(v); else v.src = v.dataset.src;
       }
       const play = el("span", "tplay"); play.innerHTML = it.locked ? ICON_LOCK : ICON_PLAY;
-      const num = el("span", "tnum", String(i + 1));
+      b.dataset.vkey = it.key;
+      const num = el("span", "tnum");
+      num.setAttribute("aria-label", fmtCount(it.views) + " tayangan");
+      num.innerHTML = ICON_EYE; num.append(el("span", "vcount", fmtCount(it.views)));
       const dur = el("span", "tdur", "");
       b.append(play, num, dur);
       b.addEventListener("click", () => { if (it.locked) openSheet(); else openPlayer(i); });
@@ -238,6 +249,8 @@
     current = i; $("plErr").textContent = "";
     $("viewer").classList.toggle("is-audio", it.type === "audio");
     $("cover").innerHTML = it.type === "audio" ? ICON_AUDIO : "";
+    updateRail(it); trackView(it);
+    if (!$("cSheet").hidden) loadComments();
     await attach(it.url);
     $("player").play().catch(()=>{});
   }
@@ -246,7 +259,129 @@
     history.pushState({ player: true }, "");
     playAt(i); $("vclose").focus();
   }
+  /* ---------- like, tayangan, komentar (di pemutar layar penuh) ---------- */
+  const curItem = () => albumItems[current];
+  const viewed = new Set();
+  let likeBusy = false, cBusy = false;
+  function updateRail(it){
+    const on = !!it.liked;
+    $("likeBtn").setAttribute("aria-pressed", String(on));
+    $("likeBtn").setAttribute("aria-label", on ? "Batal suka" : "Suka");
+    $("likeCnt").textContent = fmtCount(it.likes);
+    $("cmtCnt").textContent = fmtCount(it.comments);
+  }
+  function bumpTile(it){
+    document.querySelectorAll(".tile[data-vkey]").forEach(t => {
+      if (t.dataset.vkey !== it.key) return;
+      const c = t.querySelector(".vcount"); if (c) c.textContent = fmtCount(it.views);
+    });
+  }
+  async function trackView(it){
+    if (viewed.has(it.key)) return; viewed.add(it.key);
+    try{
+      const r = await api("/api/media/view", { key: it.key });
+      if (r.ok){ it.views = r.d.views; bumpTile(it); } else viewed.delete(it.key);
+    }catch(e){ viewed.delete(it.key); }
+  }
+  $("likeBtn").addEventListener("click", async () => {
+    const it = curItem(); if (!it || likeBusy) return;
+    likeBusy = true;
+    const was = !!it.liked, n = it.likes || 0;
+    it.liked = !was; it.likes = Math.max(0, n + (was ? -1 : 1)); updateRail(it);
+    if (it.liked){ const b = $("likeBtn"); b.classList.remove("pop"); void b.offsetWidth; b.classList.add("pop"); }
+    try{
+      const r = await api("/api/media/like", { key: it.key });
+      if (r.status === 401){ userExpired(); return; }
+      if (!r.ok) throw new Error(r.d.error || "Gagal");
+      it.liked = r.d.liked; it.likes = r.d.likes;
+    }catch(e){ it.liked = was; it.likes = n; }
+    finally{ likeBusy = false; if (curItem() === it) updateRail(it); }
+  });
+
+  const setCTitle = () => {
+    const it = curItem();
+    $("cTitle").textContent = "Komentar" + (it && it.comments ? " (" + fmtCount(it.comments) + ")" : "");
+  };
+  function commentRow(c){
+    const li = el("li");
+    const av = el("span", "cav", c.username.charAt(0)); av.setAttribute("aria-hidden", "true");
+    const box = el("div"), who = el("div", "cwho", c.username);
+    who.appendChild(el("small", "", relTime(c.createdAt)));
+    box.append(who, el("div", "ctxt", c.body));
+    li.append(av, box);
+    if (c.mine){
+      const d = el("button", "cdel", "Hapus"); d.type = "button";
+      d.addEventListener("click", () => delComment(c, li));
+      li.appendChild(d);
+    }
+    return li;
+  }
+  function renderComments(list){
+    const ul = $("cList"); ul.innerHTML = "";
+    if (!list.length){ ul.appendChild(el("li", "empty", "Belum ada komentar. Jadilah yang pertama.")); return; }
+    list.forEach(c => ul.appendChild(commentRow(c)));
+  }
+  async function loadComments(){
+    const it = curItem(); if (!it) return;
+    $("cErr").textContent = ""; setCTitle();
+    const ul = $("cList"); ul.innerHTML = ""; ul.appendChild(el("li", "empty", "Memuat..."));
+    try{
+      const r = await api("/api/media/comments?key=" + encodeURIComponent(it.key));
+      if (r.status === 401){ userExpired(); return; }
+      if (!r.ok) throw new Error(r.d.error || "Gagal memuat komentar");
+      if (curItem() !== it) return;
+      if (r.d.items.length < 100) it.comments = r.d.items.length;
+      updateRail(it); setCTitle(); renderComments(r.d.items);
+    }catch(ex){ ul.innerHTML = ""; $("cErr").textContent = ex.message; }
+  }
+  async function delComment(c, li){
+    if (!confirm("Hapus komentar ini?")) return;
+    const it = curItem();
+    try{
+      const r = await api("/api/media/comment/" + c.id + "/delete", {});
+      if (r.status === 401){ userExpired(); return; }
+      if (!r.ok && r.status !== 404) throw new Error(r.d.error || "Gagal menghapus komentar");
+      li.remove();
+      if (it){ it.comments = Math.max(0, (it.comments || 0) - 1); if (curItem() === it){ updateRail(it); setCTitle(); } }
+      if (!$("cList").children.length) renderComments([]);
+    }catch(ex){ $("cErr").textContent = ex.message; }
+  }
+  function openComments(){
+    if (!curItem()) return;
+    $("cSheet").hidden = false;
+    history.pushState({ comments: true }, "");
+    loadComments();
+  }
+  const hideComments = () => { $("cSheet").hidden = true; };
+  function closeComments(pop){
+    if ($("cSheet").hidden) return;
+    hideComments();
+    if (pop && history.state && history.state.comments){ skipPop = true; history.back(); }
+  }
+  $("cmtBtn").addEventListener("click", openComments);
+  $("cClose").addEventListener("click", () => closeComments(true));
+  $("cBg").addEventListener("click", () => closeComments(true));
+  $("cForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    const it = curItem(), inp = $("cInput"), body = inp.value.trim();
+    if (!it || !body || cBusy) return;
+    cBusy = true; $("cSend").disabled = true; $("cErr").textContent = "";
+    try{
+      const r = await api("/api/media/comment", { key: it.key, body });
+      if (r.status === 401){ userExpired(); return; }
+      if (!r.ok) throw new Error(r.d.error || "Gagal mengirim komentar");
+      inp.value = ""; it.comments = (it.comments || 0) + 1;
+      if (curItem() === it){
+        const ul = $("cList"); if (ul.querySelector(".empty")) ul.innerHTML = "";
+        ul.insertBefore(commentRow(r.d.comment), ul.firstChild); ul.scrollTop = 0;
+        updateRail(it); setCTitle();
+      }
+    }catch(ex){ $("cErr").textContent = ex.message; }
+    finally{ cBusy = false; $("cSend").disabled = false; }
+  });
+
   function closePlayer(pop){
+    hideComments();
     if ($("viewer").hidden) return;
     const p = $("player"); p.pause(); p.removeAttribute("src"); p.load();
     if (hls){ hls.destroy(); hls = null; }
@@ -254,7 +389,11 @@
     if (pop && history.state && history.state.player){ skipPop = true; history.back(); }
   }
   $("vclose").addEventListener("click", () => closePlayer(true));
-  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("viewer").hidden) closePlayer(true); });
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    if (!$("cSheet").hidden) closeComments(true);
+    else if (!$("viewer").hidden) closePlayer(true);
+  });
   $("player").addEventListener("error", () => {
     if (!$("player").getAttribute("src") && !hls) return;
     $("plErr").textContent = "Media tidak bisa dimuat. Periksa koneksi internet lalu coba lagi.";
@@ -353,7 +492,7 @@
     finally{ btn.disabled = false; }
   });
   $("logout").addEventListener("click", () => {
-    ls.del(NAME_KEY); ls.del(UKEY); utoken = ""; me = {}; srv = []; items = []; forcePw = false;
+    ls.del(NAME_KEY); ls.del(UKEY); utoken = ""; me = {}; srv = []; items = []; forcePw = false; viewed.clear();
     username = ""; $("username").value = ""; togglePw(false); showGate();
   });
 

@@ -367,7 +367,11 @@
       const cb = el("input"); cb.type = "checkbox"; cb.dataset.key = it.key; cb.checked = keep.has(it.key); cb.setAttribute("aria-label", "Pilih " + it.title);
       cb.addEventListener("change", sync);
       const mid = el("div");
-      mid.append(el("div", "name", it.title), el("div", "meta", (it.type === "audio" ? "Audio" : "Video") + " · " + fmtSize(it.size) + " · " + fmtDateTime(it.lastModified)));
+      mid.append(
+        el("div", "name", it.title),
+        el("div", "meta", (it.type === "audio" ? "Audio" : "Video") + " · " + fmtSize(it.size) + " · " + fmtDateTime(it.lastModified)),
+        el("div", "meta", (it.views || 0) + " tayangan · " + (it.likes || 0) + " suka · " + (it.comments || 0) + " komentar")
+      );
       const acts = el("div", "acts");
       if (it.url){
         const open = el("a", "", "Buka"); open.href = it.url; open.target = "_blank"; open.rel = "noopener";
@@ -378,6 +382,9 @@
         });
         acts.append(open, cp);
       }
+      const cm = el("button", "", "Komentar" + (it.comments ? " (" + it.comments + ")" : "")); cm.type = "button";
+      cm.addEventListener("click", () => openCm(it));
+      acts.appendChild(cm);
       const mv = el("button", "mv", it.category === "free" ? "Ke Premium" : "Ke Gratis"); mv.type = "button";
       mv.addEventListener("click", () => openMove([it.key], it.category === "free" ? "premium" : "free"));
       acts.appendChild(mv);
@@ -506,6 +513,48 @@
     }catch(e){ err.textContent = e.message; loadMedia(); }
     finally{ btn.disabled = false; btn.textContent = "Pindahkan"; }
   });
+
+  /* ---------- moderasi komentar ---------- */
+  let cmItem = null;
+  const cmErr = m => { $("cmErr").textContent = m || ""; };
+  function closeCm(){ $("cmSheet").hidden = true; document.body.classList.remove("noscroll"); cmItem = null; }
+  function renderCm(list){
+    const ul = $("cmList"); ul.innerHTML = "";
+    if (!list.length){ ul.appendChild(el("li", "empty", "Belum ada komentar.")); return; }
+    list.forEach(c => {
+      const li = el("li"), box = el("div"), who = el("div");
+      who.append(el("b", "", c.username), el("small", "", fmtDateTime(c.createdAt)));
+      box.append(who, el("p", "", c.body));
+      const del = el("button", "btn danger", "Hapus"); del.type = "button";
+      del.style.padding = "6px 12px"; del.style.fontSize = ".86rem";
+      del.addEventListener("click", async () => {
+        if (!confirm("Hapus komentar dari " + c.username + "?")) return;
+        del.disabled = true; cmErr("");
+        const r = await api("/api/admin/comments/" + c.id + "/delete", {});
+        if (r.status === 401){ adminExpired(); return; }
+        if (!r.ok && r.status !== 404){ del.disabled = false; cmErr(r.d.error || "Gagal menghapus komentar"); return; }
+        li.remove();
+        if (cmItem){ cmItem.comments = Math.max(0, (cmItem.comments || 0) - 1); renderFiles(); }
+        if (!$("cmList").children.length) renderCm([]);
+      });
+      li.append(box, del); ul.appendChild(li);
+    });
+  }
+  async function openCm(it){
+    cmItem = it; cmErr("");
+    $("cmTitle").textContent = "Komentar · " + it.title;
+    const ul = $("cmList"); ul.innerHTML = ""; ul.appendChild(el("li", "empty", "Memuat..."));
+    $("cmSheet").hidden = false; document.body.classList.add("noscroll");
+    try{
+      const r = await api("/api/admin/comments?key=" + encodeURIComponent(it.key));
+      if (r.status === 401){ adminExpired(); return; }
+      if (!r.ok) throw new Error(r.d.error || "Gagal memuat komentar");
+      if (cmItem === it) renderCm(r.d.items);
+    }catch(e){ ul.innerHTML = ""; cmErr(e.message); }
+  }
+  $("cmClose").addEventListener("click", closeCm);
+  $("cmBg").addEventListener("click", closeCm);
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("cmSheet").hidden) closeCm(); });
 
   /* ---------- pembayaran ---------- */
   async function decide(id, act, body){

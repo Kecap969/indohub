@@ -157,6 +157,18 @@
     </div>
   </div>
 
+  <!-- Moderasi komentar satu video -->
+  <div class="sheet" id="cmSheet" hidden role="dialog" aria-modal="true" aria-label="Komentar video">
+    <div class="sheet-bg" id="cmBg"></div>
+    <div class="sheet-box">
+      <div class="grab" aria-hidden="true"></div>
+      <button type="button" class="sclose" id="cmClose" aria-label="Tutup">&times;</button>
+      <h2 id="cmTitle">Komentar</h2>
+      <ul class="cmlist" id="cmList"></ul>
+      <p class="err" id="cmErr" role="alert"></p>
+    </div>
+  </div>
+
   <nav class="bottomnav" aria-label="Navigasi admin">
     <div class="abrand" aria-hidden="true">
       <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z"/></svg></span>
