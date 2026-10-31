@@ -193,26 +193,114 @@
     return same ? same.name : typed;
   }
 
-  // ambil 1 frame dari video lokal (di browser admin) sebagai gambar JPEG kecil
+  // ambil 1 frame BAGUS dari video lokal (di browser admin) sebagai JPEG kecil.
+  // Mencoba beberapa titik waktu, menunggu frame benar-benar siap digambar, dan melewati frame hitam/kosong.
+  // Hasil null = browser tidak bisa membaca gambar video ini (mis. codec tidak didukung) atau semua frame kosong.
   function makeThumb(file){
     return new Promise(resolve => {
       const url = URL.createObjectURL(file), v = document.createElement("video");
-      let done = false;
-      const end = blob => { if (done) return; done = true; URL.revokeObjectURL(url); v.removeAttribute("src"); v.load(); resolve(blob); };
-      v.muted = true; v.playsInline = true; v.preload = "auto";
-      v.onloadedmetadata = () => { v.currentTime = Math.min(1, (v.duration || 2) * 0.1); };
-      v.onseeked = () => {
-        try{
-          const w = 480, h = Math.round(w * (v.videoHeight || 270) / (v.videoWidth || 480));
-          const c = document.createElement("canvas"); c.width = w; c.height = h;
-          c.getContext("2d").drawImage(v, 0, 0, w, h);
-          c.toBlob(b => end(b), "image/jpeg", 0.75);
-        }catch(e){ end(null); }
+      let done = false, busy = false, timer = 0, idx = 0, times = [], best = null;
+      const finish = () => end(best && best.score >= 2 ? best.blob : null);
+      const end = blob => { if (done) return; done = true; clearTimeout(timer); URL.revokeObjectURL(url); v.removeAttribute("src"); v.load(); resolve(blob); };
+      const arm = ms => { clearTimeout(timer); timer = setTimeout(finish, ms); }; // batas waktu per tahap, bukan total
+      v.muted = true; v.playsInline = true; v.preload = "metadata";
+
+      function frameReady(cb){ // tunggu sampai frame hasil seek benar-benar tampil (bila tidak, gambar bisa hitam)
+        let fired = false; const go = () => { if (!fired){ fired = true; cb(); } };
+        if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(go);
+        setTimeout(go, v.requestVideoFrameCallback ? 400 : 200);
+      }
+      function nextShot(){
+        busy = false;
+        if (done) return;
+        if (idx >= times.length) return finish();
+        arm(25000);
+        const t = times[idx++];
+        if (Math.abs(v.currentTime - t) < 0.01 && v.readyState >= 2) return grab(); // waktu sama: event seeked tidak datang
+        v.currentTime = t;
+      }
+      function grab(){
+        if (done || busy) return; busy = true;
+        frameReady(() => {
+          if (done) return;
+          try{
+            const w = 480, h = Math.max(2, Math.round(w * v.videoHeight / v.videoWidth));
+            const c = document.createElement("canvas"); c.width = w; c.height = h;
+            const g = c.getContext("2d"); g.drawImage(v, 0, 0, w, h);
+            const px = g.getImageData(0, 0, w, h).data; let n = 0, sum = 0, sum2 = 0;
+            for (let i = 0; i < px.length; i += 4 * 97){ const l = .299 * px[i] + .587 * px[i + 1] + .114 * px[i + 2]; sum += l; sum2 += l * l; n++; }
+            const mean = sum / n, sd = Math.sqrt(Math.max(0, sum2 / n - mean * mean));
+            c.toBlob(blob => {
+              if (done) return;
+              if (blob && blob.size > 0){ const score = sd + Math.min(mean, 60) / 6; if (!best || score > best.score) best = { blob, score }; }
+              if (blob && mean > 18 && sd > 8) return end(blob); // frame bagus: selesai
+              nextShot();                                          // frame gelap/kosong: coba titik lain
+            }, "image/jpeg", 0.8);
+          }catch(e){ nextShot(); }
+        });
+      }
+      v.onloadedmetadata = () => {
+        if (!v.videoWidth || !v.videoHeight) return end(null); // tidak ada gambar yang bisa didecode
+        const d = isFinite(v.duration) && v.duration > 0 ? v.duration : 2;
+        times = [...new Set([Math.min(1, d * .1), Math.min(4, d * .3), d * .5, d * .8].map(t => +Math.min(t, Math.max(d - .1, 0)).toFixed(2)))];
+        nextShot();
       };
-      v.onerror = () => end(null);
-      setTimeout(() => end(null), 15000);
+      v.onseeked = grab;
+      v.onerror = () => finish();
+      arm(30000); // memuat metadata file besar bisa lama
       v.src = url;
     });
+  }
+
+  // unggah thumbnail ke R2: cek hasil tiap langkah, ulangi sampai 3x (jaringan putus-nyambung tidak lagi membuat thumbnail hilang diam-diam)
+  async function uploadThumb(key, blob){
+    let last;
+    for (let a = 0; a < 3; a++){
+      try{
+        const tr = await fetch("/api/presign-thumb", {
+          method: "POST", headers: {"Content-Type":"application/json","Authorization":"Bearer "+token},
+          body: JSON.stringify({ key })
+        });
+        if (tr.status === 401){ adminExpired(); throw new Error("Sesi habis"); }
+        const td = await tr.json();
+        if (!tr.ok) throw new Error(td.error || "Gagal meminta URL thumbnail");
+        const pr = await fetch(td.uploadUrl, { method: "PUT", headers: {"Content-Type":"image/jpeg"}, body: blob });
+        if (!pr.ok) throw new Error("Thumbnail ditolak (kode " + pr.status + ")");
+        return;
+      }catch(e){ last = e; if (e.message === "Sesi habis") throw e; await new Promise(r => setTimeout(r, 700 * (a + 1))); }
+    }
+    throw last;
+  }
+  async function makeAndUploadThumb(f, key){
+    let blob = null;
+    for (let a = 0; a < 2 && !blob; a++) blob = await makeThumb(f); // sekali lagi bila gagal (mis. kehabisan waktu)
+    if (!blob) throw new Error("Frame video tidak bisa dibaca browser");
+    await uploadThumb(key, blob);
+  }
+
+  // video yang sudah terunggah tetapi thumbnail-nya gagal: file lokal disimpan supaya bisa dicoba lagi tanpa upload ulang
+  let thumbPending = [], thumbBtn = null;
+  function showThumbBtn(){
+    if (!thumbBtn){
+      thumbBtn = el("button", "btn ghost", ""); thumbBtn.type = "button";
+      $("upOk").after(thumbBtn); thumbBtn.addEventListener("click", retryThumbs);
+    }
+    thumbBtn.hidden = !thumbPending.length;
+    thumbBtn.textContent = "Coba buat thumbnail lagi (" + thumbPending.length + ")";
+  }
+  async function retryThumbs(){
+    thumbBtn.disabled = true; const still = []; let album = "";
+    for (const p of thumbPending){
+      p.st.textContent = "Membuat thumbnail..."; album = p.album;
+      try{ await makeAndUploadThumb(p.f, p.key); p.st.textContent = "Selesai ✓"; p.li.className = "okrow"; }
+      catch(e){
+        p.st.textContent = "Selesai ✓ (tanpa thumbnail)"; still.push(p);
+        if (e.message === "Sesi habis"){ still.push(...thumbPending.slice(thumbPending.indexOf(p) + 1)); break; }
+      }
+    }
+    thumbPending = still; thumbBtn.disabled = false; showThumbBtn();
+    $("upOk").textContent = still.length ? still.length + " video masih tanpa thumbnail." : "Semua thumbnail berhasil dibuat.";
+    if (album) await loadMedia(album);
   }
 
   /* ---------- upload banyak file sekaligus (antrean, satu per satu) ---------- */
@@ -248,19 +336,11 @@
     q.bar.hidden = false; q.bar.value = 0;
     await putFile(d.uploadUrl, f, type, v => { q.bar.value = v; q.st.textContent = "Mengunggah " + v + "%"; });
 
+    q.noThumb = false; q.key = d.key; q.album = d.album;
     if (type.startsWith("video/")){
       q.st.textContent = "Membuat thumbnail...";
-      try{
-        const blob = await makeThumb(f);
-        if (blob){
-          const tr = await fetch("/api/presign-thumb", {
-            method: "POST", headers: {"Content-Type":"application/json","Authorization":"Bearer "+token},
-            body: JSON.stringify({ key: d.key })
-          });
-          const td = await tr.json();
-          if (tr.ok) await fetch(td.uploadUrl, { method: "PUT", headers: {"Content-Type":"image/jpeg"}, body: blob });
-        }
-      }catch(e){ /* thumbnail gagal tidak membatalkan upload */ }
+      try{ await makeAndUploadThumb(f, d.key); }
+      catch(e){ if (e.message === "Sesi habis") throw e; q.noThumb = true; } // upload video tetap dianggap berhasil, tapi ditandai
     }
     return d.album;
   }
@@ -281,7 +361,9 @@
       setSt(q, "Mengunggah 0%", "active");
       try{
         lastAlbum = await uploadOne(q, category, album) || lastAlbum;
-        q.bar.value = 100; setSt(q, "Selesai ✓", "okrow"); done++;
+        q.bar.value = 100; done++;
+        if (q.noThumb){ setSt(q, "Selesai ✓ (tanpa thumbnail)", "okrow"); thumbPending.push({ f: q.f, key: q.key, album: q.album, li: q.li, st: q.st }); }
+        else setSt(q, "Selesai ✓", "okrow");
       }catch(e){
         q.bar.hidden = true; setSt(q, "Gagal: " + e.message, "failrow"); failed.push(q.f);
         if (e.message === "Sesi habis") return;
@@ -289,6 +371,8 @@
     }
     lock(false);
     ok.textContent = done + " file berhasil diunggah ke " + CATNAME[category] + " › " + lastAlbum + (failed.length ? ", " + failed.length + " gagal" : "") + ".";
+    if (thumbPending.length) ok.textContent += " " + thumbPending.length + " video belum punya thumbnail, tekan \"Coba buat thumbnail lagi\".";
+    showThumbBtn();
     if (failed.length) err.textContent = "Ada file yang gagal. Tekan Upload lagi untuk mencoba ulang file yang gagal saja.";
     // sisakan hanya file yang gagal (di antrean & input) supaya bisa dicoba ulang; baris selesai tetap tampil sebagai info
     queue = queue.filter(q => failed.includes(q.f));
