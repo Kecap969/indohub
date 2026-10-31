@@ -101,10 +101,32 @@ const css = read("style.css");
 const js = read("app.js");
 const adminPage = read("admin.html");
 const adminJs = read("admin.js");
+const manifestJson = read("manifest.json");
+const swJs = read("sw.js");
+const offlinePage = read("offline.html");
 app.get("/", (req, res) => res.type("html").send(page));
 app.get("/style.css", (req, res) => res.type("css").send(css));
 app.get("/app.js", (req, res) => res.type("js").send(js));
 app.get("/admin.js", (req, res) => res.type("js").send(adminJs));
+
+/* ---------- PWA / aplikasi Android (TWA) ---------- */
+app.get("/manifest.json", (req, res) => { res.setHeader("Cache-Control", "public, max-age=3600"); res.type("application/manifest+json").send(manifestJson); });
+app.get("/sw.js", (req, res) => { // service worker harus dari root dan tidak boleh di-cache lama
+  res.setHeader("Cache-Control", "no-cache"); res.setHeader("Service-Worker-Allowed", "/"); res.type("js").send(swJs);
+});
+app.get("/offline.html", (req, res) => res.type("html").send(offlinePage));
+app.use("/icons", express.static(path.join(__dirname, "icons"), { maxAge: "30d", immutable: true }));
+app.get("/favicon.ico", (req, res) => res.redirect(302, "/icons/favicon.ico"));
+app.get("/apple-touch-icon.png", (req, res) => res.redirect(302, "/icons/apple-touch-icon.png"));
+// Digital Asset Links: menghubungkan situs dengan aplikasi Android supaya tampil tanpa bilah browser.
+// Isi variabel ANDROID_PACKAGE_NAME dan ANDROID_SHA256 (boleh beberapa, pisahkan koma) di Vercel.
+app.get("/.well-known/assetlinks.json", (req, res) => {
+  const pkg = (process.env.ANDROID_PACKAGE_NAME || "").trim();
+  const fps = (process.env.ANDROID_SHA256 || "").split(",").map((x) => x.trim()).filter(Boolean);
+  res.setHeader("Cache-Control", "public, max-age=300");
+  if (!pkg || !fps.length) return res.json([]);
+  res.json([{ relation: ["delegate_permission/common.handle_all_urls"], target: { namespace: "android_app", package_name: pkg, sha256_cert_fingerprints: fps } }]);
+});
 // Dashboard admin: halaman terpisah. Login tetap di "/", API admin tetap dicek token di server.
 app.get(["/admin", "/admin/", "/admin.html"], (req, res) => {
   res.setHeader("Cache-Control", "no-store");
