@@ -207,12 +207,21 @@
         b.classList.add("is-audio");
         const ic = el("span", "tic"); ic.innerHTML = ICON_AUDIO; b.appendChild(ic);
       } else {
-        const v = document.createElement("video");
-        v.muted = true; v.playsInline = true; v.preload = "metadata"; v.tabIndex = -1; v.setAttribute("aria-hidden", "true");
-        v.dataset.src = it.url + "#t=0.5";
-        v.addEventListener("loadedmetadata", () => { if (isFinite(v.duration)) dur.textContent = fmtDur(v.duration); });
-        b.appendChild(v);
-        if (thumbObserver) thumbObserver.observe(v); else v.src = v.dataset.src;
+        // cadangan (video lama tanpa thumbnail): memuat sebagian video, hanya saat tile terlihat
+        const useVideo = () => {
+          const v = document.createElement("video");
+          v.muted = true; v.playsInline = true; v.preload = "metadata"; v.tabIndex = -1; v.setAttribute("aria-hidden", "true");
+          v.dataset.src = it.url + "#t=0.5";
+          v.addEventListener("loadedmetadata", () => { if (isFinite(v.duration)) dur.textContent = fmtDur(v.duration); });
+          b.prepend(v);
+          if (thumbObserver) thumbObserver.observe(v); else v.src = v.dataset.src;
+        };
+        if (it.thumb){ // gambar JPG kecil: tidak mengunduh videonya
+          const im = document.createElement("img");
+          im.alt = ""; im.loading = "lazy"; im.decoding = "async"; im.setAttribute("aria-hidden", "true");
+          im.onerror = () => { im.remove(); useVideo(); };
+          im.src = it.thumb; b.appendChild(im);
+        } else useVideo();
       }
       const play = el("span", "tplay"); play.innerHTML = it.locked ? ICON_LOCK : ICON_PLAY;
       b.dataset.vkey = it.key;

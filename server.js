@@ -221,7 +221,11 @@ app.get("/api/list", needR2, async (req, res) => {
         it.locked = true; // link video TIDAK diberikan; hanya thumbnail (gambar) kalau ada
         const tk = `thumbs/${it.key}.jpg`;
         if (thumbKeys.has(tk)) it.thumb = await signGet(tk);
-      } else it.url = await signGet(it.key);
+      } else {
+        it.url = await signGet(it.key);
+        const tk = `thumbs/${it.key}.jpg`; // thumbnail gambar kecil, supaya daftar tidak perlu memuat videonya
+        if (thumbKeys.has(tk)) it.thumb = await signGet(tk);
+      }
     }));
     res.setHeader("Cache-Control", "no-store");
     res.json({ items, premium: member });
