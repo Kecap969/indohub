@@ -226,7 +226,7 @@
           const v = document.createElement("video");
           v.muted = true; v.playsInline = true; v.preload = "metadata"; v.tabIndex = -1; v.setAttribute("aria-hidden", "true");
           v.dataset.src = it.url + "#t=0.5";
-          v.addEventListener("loadedmetadata", () => { if (isFinite(v.duration)) dur.textContent = fmtDur(v.duration); });
+          v.addEventListener("loadedmetadata", () => { if (!it.duration && isFinite(v.duration) && v.duration > 0) dur.textContent = fmtDur(v.duration); }); // hanya bila server belum punya durasinya
           b.prepend(v);
           if (thumbObserver) thumbObserver.observe(v); else v.src = v.dataset.src;
         };
@@ -242,7 +242,7 @@
       const num = el("span", "tnum");
       num.setAttribute("aria-label", fmtCount(it.views) + " tayangan");
       num.innerHTML = ICON_EYE; num.append(el("span", "vcount", fmtCount(it.views)));
-      const dur = el("span", "tdur", "");
+      const dur = el("span", "tdur", it.duration ? fmtDur(it.duration) : ""); // durasi dari server: tampil langsung, tanpa memuat video
       b.append(play, num, dur);
       b.addEventListener("click", () => { if (it.locked) openSheet(); else openPlayer(i); });
       li.appendChild(b); list.appendChild(li);
@@ -267,7 +267,7 @@
     }
     p.src = src;
   }
-  let playTok = 0; // hanya permintaan putar terbaru yang dijalankan (geser cepat tidak menumpuk)
+  let playTok = 0, viewTimer = 0, retried = ""; // playTok: hanya permintaan putar terbaru yang dijalankan (geser cepat tidak menumpuk)
   async function playAt(i){
     const it = albumItems[i]; if (!it || it.locked) return;
     const tok = ++playTok, vw = $("viewer");
@@ -275,7 +275,9 @@
     vw.classList.remove("paused");
     vw.classList.toggle("is-audio", it.type === "audio");
     $("cover").innerHTML = it.type === "audio" ? ICON_AUDIO : "";
-    updateRail(it); trackView(it);
+    updateRail(it); retried = "";
+    clearTimeout(viewTimer); // tayangan baru dihitung bila ditonton ≥ 3 detik
+    viewTimer = setTimeout(() => { if (playTok === tok && !$("viewer").hidden) trackView(it); }, 3000);
     if (!$("cSheet").hidden) loadComments();
     $("player").pause();
     await attach(it.url); // hanya 1 media yang dimuat: src lama diganti, unduhan lama dibatalkan
@@ -411,7 +413,7 @@
   function closePlayer(pop){
     hideComments();
     if ($("viewer").hidden) return;
-    playTok++; clearTimeout(tapTimer);
+    playTok++; clearTimeout(tapTimer); clearTimeout(viewTimer);
     $("viewer").classList.remove("paused", "go-next", "go-prev", "go-edge");
     const p = $("player"); p.pause(); p.removeAttribute("src"); p.load();
     if (hls){ hls.destroy(); hls = null; }
@@ -424,8 +426,16 @@
     if (!$("cSheet").hidden) closeComments(true);
     else if (!$("viewer").hidden) closePlayer(true);
   });
-  $("player").addEventListener("error", () => {
+  $("player").addEventListener("error", async () => {
     if (!$("player").getAttribute("src") && !hls) return;
+    const it = curItem();
+    if (it && retried !== it.key){ // link sementara (6 jam) mungkin kedaluwarsa: minta link baru sekali
+      retried = it.key;
+      try{
+        const fresh = (await fetchItems()).find(x => x.key === it.key && x.url);
+        if (fresh && curItem() === it){ it.url = fresh.url; $("plErr").textContent = ""; await attach(it.url); $("player").play().catch(() => {}); return; }
+      }catch(e){}
+    }
     $("plErr").textContent = "Media tidak bisa dimuat. Periksa koneksi internet lalu coba lagi.";
   });
   $("player").addEventListener("ended", () => { if (!stepTo(1)) $("viewer").classList.add("paused"); });
@@ -680,10 +690,13 @@
       if (r.d.qris) q.src = r.d.qris;
     }catch(e){ sheetErr(e.message); }
   }
+  let payTok = 0;
   async function startPay(){
+    const tok = ++payTok;
     $("proofBtn").disabled = true; $("payAmount").textContent = "-"; pay = null;
     try{
       const r = await api("/api/payment/start", { months: monthVal() });
+      if (tok !== payTok) return; // paket sudah diganti lagi: abaikan respons lama
       if (r.status === 401){ closeSheet(); userExpired(); return; }
       if (r.d.needPassword){ me.hasPassword = false; applyMe(); $("stepPay").hidden = true; $("stepPw").hidden = false; return; }
       if (!r.ok) throw new Error(r.d.error || "Gagal membuat tagihan");

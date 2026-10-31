@@ -97,7 +97,7 @@
     if (keepAlbum){ const o = opts.find(o => o.value.toLowerCase() === keepAlbum.toLowerCase()); if (o){ $("albumSel").value = o.value; toggleNew(); } }
     else if (prevSel && opts.some(o => o.value === prevSel)){ $("albumSel").value = prevSel; toggleNew(); }
     if (!items.length) $("upDetails").open = true;
-    renderMedia(); renderHome();
+    renderMedia(); renderHome(); showDurBtn();
   }
   async function loadPay(){
     try{
@@ -252,6 +252,63 @@
     });
   }
 
+  // durasi media (detik) dari file lokal atau link; 0 bila tidak terbaca
+  function probeDuration(src, kind, release){
+    return new Promise(resolve => {
+      const m = document.createElement(kind === "audio" ? "audio" : "video");
+      let done = false, timer = 0;
+      const end = d => { if (done) return; done = true; clearTimeout(timer); if (release) release(); m.removeAttribute("src"); m.load(); resolve(isFinite(d) && d > 0 ? Math.max(1, Math.round(d)) : 0); };
+      timer = setTimeout(() => end(0), 25000);
+      m.preload = "metadata"; m.muted = true;
+      m.onloadedmetadata = () => {
+        if (isFinite(m.duration)) return end(m.duration);
+        m.ontimeupdate = () => { if (isFinite(m.duration)){ m.ontimeupdate = null; end(m.duration); } }; // webm rekaman: durasi Infinity, paksa ke ujung
+        m.currentTime = 1e7;
+      };
+      m.onerror = () => end(0);
+      m.src = src;
+    });
+  }
+  const probeFile = f => { const u = URL.createObjectURL(f); return probeDuration(u, /^audio\//.test(typeOf(f)) ? "audio" : "video", () => URL.revokeObjectURL(u)); };
+  async function saveDurations(map){
+    const r = await fetch("/api/admin/durations", {
+      method: "POST", headers: {"Content-Type":"application/json","Authorization":"Bearer "+token}, body: JSON.stringify({ durations: map })
+    });
+    if (r.status === 401){ adminExpired(); throw new Error("Sesi habis"); }
+    if (!r.ok){ let d = {}; try{ d = await r.json(); }catch(e){} throw new Error(d.error || "Gagal menyimpan durasi"); }
+  }
+  // isi durasi untuk media lama yang belum punya (sekali jalan; setelah itu semua pengguna melihat durasinya)
+  let durBtn = null, durBusy = false;
+  const missingDur = () => items.filter(i => i.url && !i.duration);
+  function showDurBtn(){
+    if (!durBtn){
+      durBtn = el("button", "btn ghost", ""); durBtn.type = "button";
+      $("folders").before(durBtn); durBtn.addEventListener("click", fillDurations);
+    }
+    const n = missingDur().length;
+    durBtn.hidden = !n && !durBusy;
+    if (!durBusy) durBtn.textContent = "Isi durasi media lama (" + n + ")";
+  }
+  async function fillDurations(){
+    const todo = missingDur(); if (!todo.length || durBusy) return;
+    durBusy = true; durBtn.disabled = true; $("aerr").textContent = "";
+    let got = {}, n = 0, bad = 0, aborted = false;
+    const flush = async () => { if (Object.keys(got).length){ const g = got; got = {}; await saveDurations(g); } };
+    try{
+      for (const it of todo){
+        durBtn.textContent = "Memeriksa durasi " + (++n) + "/" + todo.length + "...";
+        const sec = await probeDuration(it.url, it.type, null);
+        if (sec) got[it.key] = sec; else bad++;
+        if (Object.keys(got).length >= 20) await flush();
+      }
+      await flush();
+    }catch(e){ aborted = true; if (e.message !== "Sesi habis") $("aerr").textContent = e.message; }
+    durBusy = false; durBtn.disabled = false;
+    await loadMedia(); // loadMedia mengosongkan pesan, jadi pesan ditulis sesudahnya
+    if (!aborted && bad) $("aerr").textContent = bad + " file tidak terbaca durasinya.";
+    else if (aborted && $("aerr").textContent === "") $("aerr").textContent = "Pengisian durasi terhenti. Tekan tombolnya lagi untuk melanjutkan.";
+  }
+
   // unggah thumbnail ke R2: cek hasil tiap langkah, ulangi sampai 3x (jaringan putus-nyambung tidak lagi membuat thumbnail hilang diam-diam)
   async function uploadThumb(key, blob){
     let last;
@@ -324,6 +381,7 @@
   async function uploadOne(q, category, album){
     const f = q.f, type = typeOf(f);
     if (!/^(video|audio)\//.test(type)) throw new Error("Bukan file video/audio");
+    if (!/\.(mp4|m4v|webm|mov|mp3|m4a|aac|wav|ogg|opus|flac)$/i.test(f.name)) throw new Error("Format tidak didukung (pakai mp4, m4v, webm, mov, mp3, m4a, aac, wav, ogg, opus, flac)");
     if (f.size > cfg.maxUploadMB * 1048576) throw new Error("Terlalu besar (maks " + cfg.maxUploadMB + " MB)");
     const r = await fetch("/api/presign", {
       method: "POST", headers: {"Content-Type":"application/json","Authorization":"Bearer "+token},
@@ -337,6 +395,8 @@
     await putFile(d.uploadUrl, f, type, v => { q.bar.value = v; q.st.textContent = "Mengunggah " + v + "%"; });
 
     q.noThumb = false; q.key = d.key; q.album = d.album;
+    try{ const sec = await probeFile(f); if (sec) await saveDurations({ [d.key]: sec }); }
+    catch(e){ if (e.message === "Sesi habis") throw e; } // durasi bisa diisi nanti lewat tombol "Isi durasi media lama"
     if (type.startsWith("video/")){
       q.st.textContent = "Membuat thumbnail...";
       try{ await makeAndUploadThumb(f, d.key); }

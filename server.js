@@ -36,7 +36,7 @@ const signGet = (key, secs) => getSignedUrl(r2(), new GetObjectCommand({ Bucket:
 const exists = async (key) => {
   try { await r2().send(new HeadObjectCommand({ Bucket: bucket(), Key: key })); return true; } catch (e) { return false; }
 };
-const fail = (res, e, msg) => res.status(500).json({ error: msg || "Terjadi kesalahan di server" });
+const fail = (res, e, msg) => { console.error(msg || "Kesalahan server", "-", (e && e.message) || e); return res.status(500).json({ error: msg || "Terjadi kesalahan di server" }); };
 
 /* ---------- data pengguna ---------- */
 async function premiumUntil(u) {
@@ -57,7 +57,32 @@ async function meInfo(u) {
     pending: p ? { id: p.id, months: p.months, amount: p.amount, createdAt: p.created_at } : null,
   };
 }
+// tambah bulan tanpa "meloncat": 31 Jan + 1 bulan = 28/29 Feb (bukan 3 Mar)
+function addMonths(d, n) {
+  const r = new Date(d), day = r.getUTCDate();
+  r.setUTCDate(1); r.setUTCMonth(r.getUTCMonth() + n);
+  r.setUTCDate(Math.min(day, new Date(Date.UTC(r.getUTCFullYear(), r.getUTCMonth() + 1, 0)).getUTCDate()));
+  return r;
+}
 const notify = (u, title, body) => db("POST", "ih_notifications", { username_lc: u, title, body }, "return=minimal");
+
+/* ---------- durasi media: disimpan sekali di meta/durations.json (daftar tidak perlu memuat videonya) ---------- */
+const DUR_KEY = "meta/durations.json";
+async function readDur(strict) {
+  try {
+    const out = await r2().send(new GetObjectCommand({ Bucket: bucket(), Key: DUR_KEY }));
+    const j = JSON.parse(await out.Body.transformToString());
+    return j && typeof j === "object" && !Array.isArray(j) ? j : {};
+  } catch (e) {
+    const missing = e && (e.name === "NoSuchKey" || e.Code === "NoSuchKey" || (e.$metadata && e.$metadata.httpStatusCode === 404));
+    if (missing || !strict) return {};
+    throw e; // jangan menimpa file durasi bila bacanya gagal karena hal lain
+  }
+}
+const writeDur = (obj) => r2().send(new PutObjectCommand({ Bucket: bucket(), Key: DUR_KEY, Body: JSON.stringify(obj), ContentType: "application/json" }));
+async function editDur(fn) { // ubah isi file durasi; gagal tidak boleh menggagalkan aksi utama
+  try { const cur = await readDur(true); if (fn(cur)) await writeDur(cur); } catch (e) { console.error("Gagal memperbarui durasi:", e.message); }
+}
 
 /* ---------- app ---------- */
 const app = express();
@@ -179,7 +204,8 @@ app.get("/api/list", needR2, async (req, res) => {
     if (!member && t && t.k === "user") member = !!(await premiumUntil(t.u));
 
     const lists = await Promise.all(["free/", "premium/", "uploads/"].map(listPrefix));
-    const thumbKeys = new Set((await listPrefix("thumbs/")).map((o) => o.Key));
+    const [thumbList, durs] = await Promise.all([listPrefix("thumbs/"), readDur(false)]);
+    const thumbKeys = new Set(thumbList.map((o) => o.Key));
     const items = lists.flat()
       .filter((o) => VIDEO.test(o.Key) || AUDIO.test(o.Key))
       .map((o) => {
@@ -194,6 +220,7 @@ app.get("/api/list", needR2, async (req, res) => {
           size: o.Size,
           lastModified: o.LastModified,
           type: AUDIO.test(o.Key) ? "audio" : "video",
+          duration: Number(durs[o.Key]) > 0 ? Math.round(Number(durs[o.Key])) : 0, // detik; 0 = belum diketahui
         };
       })
       .filter(Boolean)
@@ -229,9 +256,7 @@ app.get("/api/list", needR2, async (req, res) => {
     }));
     res.setHeader("Cache-Control", "no-store");
     res.json({ items, premium: member });
-  } catch (e) {
-    res.status(500).json({ error: "Gagal memuat daftar media" });
-  }
+  } catch (e) { fail(res, e, "Gagal memuat daftar media"); }
 });
 
 /* ---------- interaksi: tayangan, like, komentar ---------- */
@@ -336,6 +361,8 @@ app.post("/api/presign", needAdmin, needR2, async (req, res) => {
   if (!/^(video|audio)\//.test(contentType || ""))
     return res.status(400).json({ error: "Hanya file video atau audio yang boleh diupload" });
   if (!filename || typeof filename !== "string") return res.status(400).json({ error: "Nama file kosong" });
+  if (!VIDEO.test(filename) && !AUDIO.test(filename))
+    return res.status(400).json({ error: "Format tidak didukung. Pakai mp4, m4v, webm, mov, mp3, m4a, aac, wav, ogg, opus, atau flac" });
   if (!size || size > SITE.maxUploadMB * 1024 * 1024)
     return res.status(400).json({ error: `Ukuran file maksimal ${SITE.maxUploadMB} MB` });
 
@@ -344,9 +371,7 @@ app.post("/api/presign", needAdmin, needR2, async (req, res) => {
   try {
     const uploadUrl = await getSignedUrl(r2(), new PutObjectCommand({ Bucket: bucket(), Key: key, ContentType: contentType }), { expiresIn: 900 });
     res.json({ uploadUrl, key, album: albumName });
-  } catch (e) {
-    res.status(500).json({ error: "Gagal membuat URL upload" });
-  }
+  } catch (e) { fail(res, e, "Gagal membuat URL upload"); }
 });
 
 // thumbnail video disimpan terpisah di thumbs/<key-video>.jpg supaya video premium tetap tidak bocor
@@ -357,9 +382,7 @@ app.post("/api/presign-thumb", needAdmin, needR2, async (req, res) => {
   try {
     const uploadUrl = await getSignedUrl(r2(), new PutObjectCommand({ Bucket: bucket(), Key: `thumbs/${key}.jpg`, ContentType: "image/jpeg" }), { expiresIn: 900 });
     res.json({ uploadUrl });
-  } catch (e) {
-    res.status(500).json({ error: "Gagal membuat URL thumbnail" });
-  }
+  } catch (e) { fail(res, e, "Gagal membuat URL thumbnail"); }
 });
 
 app.post("/api/delete", needAdmin, needR2, async (req, res) => {
@@ -370,15 +393,19 @@ app.post("/api/delete", needAdmin, needR2, async (req, res) => {
     return res.status(400).json({ error: "Hanya file di folder free/, premium/ atau uploads/ yang boleh dihapus" });
   try {
     const all = keys.concat(keys.filter((k) => !k.startsWith("uploads/")).map((k) => `thumbs/${k}.jpg`));
-    for (let i = 0; i < all.length; i += 1000)
-      await r2().send(new DeleteObjectsCommand({ Bucket: bucket(), Delete: { Objects: all.slice(i, i + 1000).map((Key) => ({ Key })), Quiet: true } }));
-    if (!dbMissing().length) { // hapus juga like, komentar, tayangan milik video ini
-      try { await db("POST", "rpc/ih_drop_media", { keys }); } catch (e) { console.error("Gagal membersihkan data interaksi:", e.message); }
+    const bad = new Set();
+    for (let i = 0; i < all.length; i += 1000) {
+      const out = await r2().send(new DeleteObjectsCommand({ Bucket: bucket(), Delete: { Objects: all.slice(i, i + 1000).map((Key) => ({ Key })), Quiet: true } }));
+      (out.Errors || []).forEach((x) => bad.add(x.Key));
     }
+    const gone = keys.filter((k) => !bad.has(k)); // hanya yang benar-benar terhapus
+    if (gone.length && !dbMissing().length) { // hapus juga like, komentar, tayangan milik video ini
+      try { await db("POST", "rpc/ih_drop_media", { keys: gone }); } catch (e) { console.error("Gagal membersihkan data interaksi:", e.message); }
+    }
+    if (gone.length) await editDur((cur) => { let ch = false; gone.forEach((k) => { if (k in cur) { delete cur[k]; ch = true; } }); return ch; });
+    if (bad.size) return res.status(500).json({ error: `${keys.length - gone.length} file gagal dihapus. Coba lagi.`, deleted: gone.length });
     res.json({ deleted: keys.length });
-  } catch (e) {
-    res.status(500).json({ error: "Gagal menghapus file" });
-  }
+  } catch (e) { fail(res, e, "Gagal menghapus file"); }
 });
 
 // Pindahkan file antar kategori/album (R2 tidak punya "move": salin dulu, lalu hapus yang lama; thumbnail ikut)
@@ -395,22 +422,30 @@ app.post("/api/move", needAdmin, needR2, async (req, res) => {
   const albumName = category === "free" ? "Umum" : cleanAlbum(album);
   if (albumName.length < 2) return res.status(400).json({ error: "Nama album minimal 2 karakter (huruf, angka, spasi, - atau _)" });
 
+  const taken = new Set(); // tujuan yang sudah dipakai permintaan ini
+  const uniqTo = (to, n) => to.replace(/([^/]+)$/, `${Date.now()}${n}-$1`);
   const moves = [...new Set(keys)].map((k) => ({ from: k, to: `${category}/${albumName}/${k.split("/").pop()}` })).filter((m) => m.from !== m.to);
   if (!moves.length) return res.json({ moved: 0 });
+  moves.forEach((m, n) => { while (taken.has(m.to)) m.to = uniqTo(m.to, n); taken.add(m.to); }); // nama sama dalam 1 permintaan
   const done = [];
   let err = null;
-  try {
-    for (let i = 0; i < moves.length; i += 5) {
-      await Promise.all(moves.slice(i, i + 5).map(async (m) => {
-        await copyObj(m.from, m.to);
-        m.thumb = false;
-        if (!m.from.startsWith("uploads/") && (await exists(`thumbs/${m.from}.jpg`))) {
-          try { await copyObj(`thumbs/${m.from}.jpg`, `thumbs/${m.to}.jpg`); m.thumb = true; } catch (e) { /* thumbnail lama dibiarkan */ }
-        }
-        done.push(m);
-      }));
-    }
-  } catch (e) { err = e; }
+  for (let i = 0; i < moves.length; i += 5) {
+    const batch = moves.slice(i, i + 5);
+    // allSettled: satu gagal tidak membuat yang lain "menggantung" (salinan yang selesai tetap tercatat dan file asalnya dihapus)
+    const results = await Promise.allSettled(batch.map(async (m, n) => {
+      if (await exists(m.to)) m.to = uniqTo(m.to, n + 1); // jangan menimpa file lain yang sudah ada di tujuan
+      await copyObj(m.from, m.to);
+      m.thumb = false;
+      if (!m.from.startsWith("uploads/") && (await exists(`thumbs/${m.from}.jpg`))) {
+        try { await copyObj(`thumbs/${m.from}.jpg`, `thumbs/${m.to}.jpg`); m.thumb = true; } catch (e) { /* thumbnail lama dibiarkan */ }
+      }
+      done.push(m);
+    }));
+    const rej = results.find((x) => x.status === "rejected");
+    if (rej) { err = rej.reason; break; }
+  }
+  if (err) console.error("Pindah file gagal sebagian:", err.message || err);
+  if (done.length) await editDur((cur) => { let ch = false; done.forEach((m) => { if (m.from in cur) { cur[m.to] = cur[m.from]; delete cur[m.from]; ch = true; } }); return ch; });
   if (done.length && !dbMissing().length) { // like, komentar, tayangan ikut ke key baru
     try { await db("POST", "rpc/ih_move_media", { moves: done.map((m) => ({ from: m.from, to: m.to })) }); }
     catch (e) { console.error("Gagal memindahkan data interaksi:", e.message); }
@@ -423,6 +458,21 @@ app.post("/api/move", needAdmin, needR2, async (req, res) => {
   } catch (e) { err = err || e; }
   if (err) return res.status(500).json({ error: `Hanya ${done.length} dari ${moves.length} file yang berhasil dipindahkan. Coba lagi.` });
   res.json({ moved: done.length });
+});
+
+// simpan durasi (detik) hasil ukur di browser admin: saat upload, atau pengisian untuk video lama
+app.post("/api/admin/durations", needAdmin, needR2, async (req, res) => {
+  const inc = (req.body && req.body.durations) || {};
+  const ks = typeof inc === "object" && !Array.isArray(inc) ? Object.keys(inc) : [];
+  if (!ks.length || ks.length > 500) return res.status(400).json({ error: "Daftar durasi tidak valid (maksimal 500 sekaligus)" });
+  const clean = {};
+  ks.forEach((k) => { const s = Number(inc[k]); if (validMediaKey(k) && isFinite(s) && s > 0 && s < 172800) clean[k] = Math.max(1, Math.round(s)); });
+  if (!Object.keys(clean).length) return res.status(400).json({ error: "Tidak ada durasi yang valid" });
+  try {
+    const cur = await readDur(true);
+    await writeDur({ ...cur, ...clean });
+    res.json({ saved: Object.keys(clean).length });
+  } catch (e) { fail(res, e, "Gagal menyimpan durasi"); }
 });
 
 /* ---------- pembayaran: sisi user ---------- */
@@ -544,13 +594,20 @@ app.post("/api/admin/payments/:id/approve", needAdmin, needDb, async (req, res) 
     const p = (await db("GET", `ih_payments?id=eq.${req.params.id}&select=id,username_lc,months,status`))[0];
     if (!p || p.status !== "pending") return res.status(400).json({ error: "Pembayaran ini sudah diproses atau belum dikirim" });
     const months = SITE.plans[Number((req.body || {}).months)] ? Number(req.body.months) : p.months;
-    // perpanjang dari tanggal berakhir kalau masih aktif, selain itu dari sekarang
-    const cur = (await db("GET", `ih_subscriptions?username_lc=eq.${enc(p.username_lc)}&select=expires_at`))[0];
-    const base = cur && new Date(cur.expires_at) > new Date() ? new Date(cur.expires_at) : new Date();
-    const exp = new Date(base);
-    exp.setUTCMonth(exp.getUTCMonth() + months);
-    await db("POST", "ih_subscriptions?on_conflict=username_lc", { username_lc: p.username_lc, expires_at: exp.toISOString() }, "resolution=merge-duplicates,return=minimal");
-    await db("PATCH", `ih_payments?id=eq.${p.id}`, { status: "approved", months, decided_at: new Date().toISOString() }, "return=minimal");
+    // klaim dulu secara atomik: kalau 2 permintaan masuk bersamaan (klik ganda / jaringan lambat), hanya satu yang lolos
+    const claimed = await db("PATCH", `ih_payments?id=eq.${p.id}&status=eq.pending&select=id`, { status: "approved", months, decided_at: new Date().toISOString() });
+    if (!claimed || !claimed.length) return res.status(400).json({ error: "Pembayaran ini sudah diproses atau belum dikirim" });
+    let exp;
+    try {
+      // perpanjang dari tanggal berakhir kalau masih aktif, selain itu dari sekarang
+      const cur = (await db("GET", `ih_subscriptions?username_lc=eq.${enc(p.username_lc)}&select=expires_at`))[0];
+      const base = cur && new Date(cur.expires_at) > new Date() ? new Date(cur.expires_at) : new Date();
+      exp = addMonths(base, months);
+      await db("POST", "ih_subscriptions?on_conflict=username_lc", { username_lc: p.username_lc, expires_at: exp.toISOString() }, "resolution=merge-duplicates,return=minimal");
+    } catch (e) { // gagal memberi premium: kembalikan ke "menunggu" supaya bisa disetujui ulang
+      await db("PATCH", `ih_payments?id=eq.${p.id}`, { status: "pending", decided_at: null }, "return=minimal").catch(() => {});
+      throw e;
+    }
     await notify(p.username_lc, "Pembayaran disetujui", `Premium aktif sampai ${exp.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}.`);
     res.json({ ok: true, expiresAt: exp.toISOString() });
   } catch (e) { fail(res, e, "Gagal menyetujui"); }
