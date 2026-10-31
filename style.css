@@ -688,3 +688,29 @@ button,a,input,select,summary,label{touch-action:manipulation}
 /* v4: indikator memuat (jaringan lambat tidak lagi tampak seperti layar kosong) */
 .boot{position:fixed;inset:0;z-index:50;display:grid;place-items:center;pointer-events:none;color:#8a97a6;font:600 .95rem system-ui,sans-serif}
 .boot[hidden]{display:none}
+
+/* v7: profil. Satu elemen yang menonjol: centang emas + cincin emas di avatar premium */
+.profile{padding:22px 18px;text-align:left}
+.pf-head{display:flex;align-items:center;gap:16px}
+.profile .avatar{flex:none;margin:0;width:76px;height:76px;font-size:2rem;box-shadow:0 0 0 1px var(--line)}
+.profile.is-premium .avatar{box-shadow:0 0 0 3px var(--surface),0 0 0 5.5px #f2ae2e}
+.pf-id{min-width:0}
+.profile .pf-name{display:flex;align-items:center;gap:6px;margin:0 0 6px;font-size:1.45rem}
+.pf-name #who{min-width:0;overflow-wrap:anywhere}
+.vbadge{flex:none;display:inline-grid;place-items:center;width:1.2em;height:1.2em}
+.vbadge svg{width:100%;height:100%;filter:drop-shadow(0 1px 1.5px rgba(150,90,0,.4))}
+.pf-tier{display:inline-block;padding:2px 11px;border-radius:99px;font-size:.8rem;font-weight:700;color:var(--muted);background:color-mix(in srgb,var(--muted) 16%,transparent)}
+.profile.is-premium .pf-tier{color:#4a2f00;background:linear-gradient(135deg,#ffdf7a,#f2ae2e)}
+.pf-status{margin:20px 0 14px;border:1px solid var(--line);border-radius:14px}
+.pf-row{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:12px 14px}
+.pf-row:not([hidden]) ~ .pf-row:not([hidden]){border-top:1px solid var(--line)}
+.pf-row>span{color:var(--muted)}
+.pf-row>b{font-weight:700;text-align:right;white-space:nowrap}
+.pf-row small{display:block;margin-top:1px;font-size:.8rem;font-weight:600;color:var(--muted)}
+.profile>.btn,.pf-acct>.btn{display:block;width:100%}
+.btn.gold{background:linear-gradient(135deg,#ffdf7a,#f2ae2e);color:#4a2f00;font-weight:800}
+.pf-acct{margin-top:18px;padding-top:18px;border-top:1px solid var(--line);display:grid;gap:10px}
+.pf-acct #pwToggle,.pf-acct #pwOk{margin:0}
+.pf-acct .pwform{margin:2px 0 0;max-width:none}
+.pf-acct .hint{margin:0;max-width:none}
+.pf-acct .hint:empty{display:none}

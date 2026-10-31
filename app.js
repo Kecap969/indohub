@@ -79,7 +79,21 @@
   function applyMe(){
     username = me.username || username;
     $("who").textContent = username; $("avatar").textContent = username.charAt(0);
-    $("premInfo").textContent = me.premiumUntil ? "Premium aktif sampai " + fmtDate(me.premiumUntil) : "Akun gratis";
+    if ($("profCard")){ // profil: centang emas + status premium
+      const prem = !!me.premiumUntil;
+      $("profCard").classList.toggle("is-premium", prem);
+      $("nameBadge").hidden = !prem;
+      $("tier").textContent = prem ? "Premium" : "Gratis";
+      $("rowUntil").hidden = !prem;
+      if (prem){
+        const left = Math.max(0, Math.ceil((new Date(me.premiumUntil) - Date.now()) / 864e5));
+        $("premInfo").textContent = fmtDate(me.premiumUntil);
+        $("premLeft").textContent = left > 1 ? left + " hari lagi" : "berakhir hari ini";
+      }
+      $("rowPend").hidden = !me.pending;
+      $("pfUpgrade").textContent = prem ? "Perpanjang premium" : "Jadi premium";
+      $("pfUpgrade").classList.toggle("gold", !prem); $("pfUpgrade").classList.toggle("ghost", prem);
+    }
     $("pwToggle").textContent = me.hasPassword ? "Ganti password" : "Buat password";
     $("pwCur").hidden = !me.hasPassword; $("pwCur").required = !!me.hasPassword;
     if (tab === "premium" && !openAlbum) renderSubCard("premium");
@@ -492,7 +506,7 @@
       return;
     }
     try{ const n = await api("/api/notifs"); srv = n.ok ? n.d.items : []; }catch(e){ srv = []; }
-    $("mediaCount").textContent = openItems().length + " media tersedia";
+    $("mediaCount").textContent = openItems().length;
     if (!openAlbum && (tab === "home" || tab === "premium")) renderAlbums();
     updateDot();
   }
@@ -724,7 +738,7 @@
       if (s.ok){ me = s.d.me; applyMe(); }
       items = await fetchItems();
       const n = await api("/api/notifs"); if (n.ok) srv = n.d.items;
-      $("mediaCount").textContent = openItems().length + " media tersedia";
+      $("mediaCount").textContent = openItems().length;
       if (!openAlbum && (tab === "home" || tab === "premium")) renderAlbums();
       if (tab === "notif") renderNotifs();
       updateDot();
@@ -747,6 +761,7 @@
 
   /* ---------- start ---------- */
   const within = (p, ms) => Promise.race([p, new Promise(res => setTimeout(() => res(null), ms))]); // null bila kelamaan
+  if ($("pfUpgrade")) $("pfUpgrade").addEventListener("click", () => setTab("premium"));
   async function start(){
     try{ const r = await within(fetch("/api/config"), 2500); if (r && r.ok) cfg = Object.assign(cfg, await r.json()); }catch(e){}
     document.title = cfg.title;
