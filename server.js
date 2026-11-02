@@ -394,6 +394,18 @@ app.post("/api/presign", needAdmin, needR2, async (req, res) => {
     return res.status(400).json({ error: `Ukuran file maksimal ${SITE.maxUploadMB} MB` });
 
   const safeName = filename.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(-80) || "file";
+  // Anti-duplikat: nama file (tanpa awalan waktu) dan ukuran sama dengan yang sudah ada di perpustakaan = file yang sama.
+  // File baru tidak diunggah, jadi file lama beserta like/komentar/tayangannya tetap utuh.
+  const baseName = (k) => k.split("/").pop().replace(/^\d{10,}-/, "").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(-80).toLowerCase();
+  try {
+    const want = safeName.toLowerCase();
+    const same = (await Promise.all(["free/", "premium/", "uploads/"].map(listPrefix))).flat()
+      .find((o) => o.Size === size && baseName(o.Key) === want);
+    if (same) {
+      const p = same.Key.split("/");
+      return res.json({ duplicate: true, key: same.Key, where: p[0] === "uploads" ? "Gratis" : (p[0] === "premium" ? "Premium" : "Gratis") + " › " + p[1] });
+    }
+  } catch (e) { console.error("Cek duplikat gagal, upload tetap dilanjutkan:", e.message); }
   const key = `${category}/${albumName}/${Date.now()}-${safeName}`;
   try {
     const uploadUrl = await getSignedUrl(r2(), new PutObjectCommand({ Bucket: bucket(), Key: key, ContentType: contentType }), { expiresIn: 900 });

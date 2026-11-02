@@ -390,6 +390,7 @@
     const d = await r.json();
     if (r.status === 401){ adminExpired(); throw new Error("Sesi habis"); }
     if (!r.ok) throw new Error(d.error || "Gagal memulai upload");
+    if (d.duplicate){ q.dup = d.where || true; return null; } // file yang sama sudah ada: tidak diunggah lagi
 
     q.bar.hidden = false; q.bar.value = 0;
     await putFile(d.uploadUrl, f, type, v => { q.bar.value = v; q.st.textContent = "Mengunggah " + v + "%"; });
@@ -414,13 +415,14 @@
 
     const lock = v => { [btn, $("file"), $("albumSel"), $("albumNew"), ...document.querySelectorAll("input[name=cat]")].forEach(x => { x.disabled = v; }); };
     lock(true);
-    const failed = []; let done = 0, lastAlbum = album;
+    const failed = []; let done = 0, skipped = 0, lastAlbum = album;
     for (let i = 0; i < queue.length; i++){
       const q = queue[i];
       btn.textContent = "Mengunggah " + (i + 1) + " dari " + queue.length + "...";
       setSt(q, "Mengunggah 0%", "active");
       try{
         lastAlbum = await uploadOne(q, category, album) || lastAlbum;
+        if (q.dup){ skipped++; q.bar.hidden = true; setSt(q, "Sudah ada" + (q.dup !== true ? " di " + q.dup : "") + " \u2014 dilewati", "okrow"); continue; }
         q.bar.value = 100; done++;
         if (q.noThumb){ setSt(q, "Selesai ✓ (tanpa thumbnail)", "okrow"); thumbPending.push({ f: q.f, key: q.key, album: q.album, li: q.li, st: q.st }); }
         else setSt(q, "Selesai ✓", "okrow");
@@ -430,7 +432,7 @@
       }
     }
     lock(false);
-    ok.textContent = done + " file berhasil diunggah ke " + CATNAME[category] + " › " + lastAlbum + (failed.length ? ", " + failed.length + " gagal" : "") + ".";
+    ok.textContent = done + " file berhasil diunggah ke " + CATNAME[category] + " › " + lastAlbum + (skipped ? ", " + skipped + " dilewati karena sudah ada" : "") + (failed.length ? ", " + failed.length + " gagal" : "") + ".";
     if (thumbPending.length) ok.textContent += " " + thumbPending.length + " video belum punya thumbnail, tekan \"Coba buat thumbnail lagi\".";
     showThumbBtn();
     if (failed.length) err.textContent = "Ada file yang gagal. Tekan Upload lagi untuk mencoba ulang file yang gagal saja.";
