@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <noscript><link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet"></noscript>
-<link rel="stylesheet" href="/style.css?v=10">
+<link rel="stylesheet" href="/style.css?v=11">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icons/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
@@ -89,6 +89,12 @@
           <div class="pf-row"><span>Media tersedia</span><b id="mediaCount">0</b></div>
         </div>
         <button class="btn gold" id="pfUpgrade" type="button">Jadi premium</button>
+        <div class="pf-app" id="appCard" hidden>
+          <div class="pf-row"><span>Aplikasi Android</span><b id="appMeta"></b></div>
+          <button class="btn" id="appDl" type="button">Download aplikasi</button>
+          <p class="err" id="appErr" role="alert"></p>
+          <p class="pf-apphint" id="appHint">Jika Chrome menampilkan peringatan, pilih <b>Simpan/Tetap download</b>. Saat memasang, izinkan <b>Pasang dari sumber ini</b> bila diminta.</p>
+        </div>
         <div class="pf-acct">
           <button class="btn ghost" id="pwToggle" type="button">Buat password</button>
           <form id="pwForm" class="pwform" hidden autocomplete="off">
@@ -222,7 +228,7 @@
   </nav>
 </div>
 
-<script src="/app.js?v=10"></script>
+<script src="/app.js?v=12"></script>
 <script>if("serviceWorker"in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){});});}</script>
 </body>
 </html>

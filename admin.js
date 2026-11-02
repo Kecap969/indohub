@@ -763,6 +763,37 @@
     finally{ btn.disabled = false; }
   });
 
+  /* ---------- aplikasi Android (APK) ---------- */
+  async function loadApk(){
+    try{
+      const r = await api("/api/admin/apk");
+      if (r.status === 401){ adminExpired(); return; }
+      $("apkNow").textContent = r.ok && r.d.available
+        ? "Saat ini: " + (r.d.version ? "v" + r.d.version + " · " : "") + fmtSize(r.d.size) + " · diperbarui " + fmtDateTime(r.d.updatedAt)
+        : "Belum ada APK yang diunggah.";
+    }catch(e){ $("apkNow").textContent = ""; }
+  }
+  $("apkBtn").addEventListener("click", async () => {
+    const f = $("apkFile").files[0], err = $("apkErr"), ok = $("apkOk"), btn = $("apkBtn"), bar = $("apkBar");
+    err.textContent = ""; ok.textContent = "";
+    if (!f){ err.textContent = "Pilih file APK dulu."; return; }
+    if (!/\.apk$/i.test(f.name)){ err.textContent = "File harus berformat .apk."; return; }
+    if (f.size > cfg.maxUploadMB * 1048576){ err.textContent = "Terlalu besar (maks " + cfg.maxUploadMB + " MB)."; return; }
+    btn.disabled = true; bar.hidden = false; bar.value = 0;
+    try{
+      const p = await api("/api/admin/apk-presign", { size: f.size, name: f.name });
+      if (p.status === 401){ adminExpired(); return; }
+      if (!p.ok) throw new Error(p.d.error || "Gagal memulai upload");
+      await putFile(p.d.uploadUrl, f, p.d.contentType, v => { bar.value = v; ok.textContent = "Mengunggah " + v + "%"; });
+      const c = await api("/api/admin/apk-commit", { version: $("apkVer").value.trim() });
+      if (c.status === 401){ adminExpired(); return; }
+      if (!c.ok) throw new Error(c.d.error || "Gagal menyimpan info versi");
+      $("apkFile").value = ""; $("apkVer").value = ""; ok.textContent = "APK berhasil diunggah. Pengguna sudah bisa mengunduhnya di Profil.";
+      loadApk();
+    }catch(e){ err.textContent = e.message; ok.textContent = ""; }
+    finally{ btn.disabled = false; bar.hidden = true; }
+  });
+
   /* ---------- pengguna ---------- */
   function renderUsers(){
     const q = $("uq").value.trim().toLowerCase();
@@ -837,7 +868,7 @@
     try{ const r = await fetch("/api/config"); if (r.ok) cfg = Object.assign(cfg, await r.json()); }catch(e){}
     $("admin").hidden = false;
     setTab(TITLES[location.hash.slice(1)] ? location.hash.slice(1) : "home");
-    loadMedia(); loadPay();
+    loadMedia(); loadPay(); loadApk();
     // bukti transfer baru muncul otomatis (tiap 30 detik, hanya saat halaman terlihat)
     setInterval(() => { if (document.visibilityState === "visible") loadPay(); }, 30000);
   }

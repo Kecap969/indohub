@@ -119,6 +119,7 @@
     });
     if (pane === "catalog"){ closeAlbum(false); renderAlbums(); }
     else closePlayer(false);
+    if (name === "profil") loadAppInfo();
     if (name === "notif"){ renderNotifs(); if (latest()) ls.set(SEEN_KEY, String(latest())); updateDot(); }
     if (name !== "home") refreshQuiet();
     window.scrollTo(0, 0);
@@ -758,6 +759,42 @@
     }catch(e){}
   }
 
+  /* ---------- profil: download aplikasi Android ---------- */
+  // kartu disembunyikan jika sudah di dalam aplikasi terpasang, di iPhone/iPad, atau belum ada APK
+  const inApp = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true || document.referrer.indexOf("android-app://") === 0;
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  // browser bawaan aplikasi lain (Instagram, Facebook, Line, WebView) sering memblokir unduhan APK
+  const inWebView = /FBAN|FBAV|Instagram|Line\/|MicroMessenger|TikTok|; wv\)/i.test(navigator.userAgent);
+  async function loadAppInfo(){
+    const card = $("appCard"); if (!card || inApp || isIOS) return;
+    try{
+      const r = await api("/api/app");
+      if (r.status === 401) return;
+      if (r.ok && !r.d.available){ card.hidden = true; return; } // belum ada APK
+      card.hidden = false;
+      if (!r.ok){ // gagal memuat: tetap tampil supaya pengguna tahu, bukan hilang diam-diam
+        $("appMeta").textContent = ""; $("appErr").textContent = r.d.error || "Gagal memuat info aplikasi. Coba lagi.";
+        return;
+      }
+      $("appMeta").textContent = (r.d.version ? "v" + r.d.version + " · " : "") + fmtSize(r.d.size);
+      $("appErr").textContent = inWebView ? "Buka situs ini di Chrome (menu \u22EE \u2192 Buka di browser) agar unduhan berjalan." : "";
+    }catch(e){
+      card.hidden = false; $("appMeta").textContent = ""; $("appErr").textContent = "Gagal memuat info aplikasi. Periksa koneksi.";
+    }
+  }
+  $("appDl").addEventListener("click", async () => {
+    const err = $("appErr"), btn = $("appDl"); err.textContent = ""; btn.disabled = true;
+    try{
+      const r = await api("/api/app");
+      if (r.status === 401){ userExpired(); return; }
+      if (!r.ok || !r.d.available || !r.d.url) throw new Error(r.d.error || "Aplikasi belum tersedia");
+      const a = document.createElement("a"); // lebih andal daripada location.href di Chrome Android
+      a.href = r.d.url; a.download = "Indohub.apk"; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove();
+      err.textContent = inWebView ? "Jika unduhan tidak mulai, buka situs ini di Chrome." : "";
+    }catch(e){ err.textContent = e.message || "Gagal mengunduh"; }
+    finally{ setTimeout(() => { btn.disabled = false; }, 1500); }
+  });
+
   /* ---------- profil: buat / ganti password ---------- */
   $("pwToggle").addEventListener("click", () => {
     $("pwForm").hidden = !$("pwForm").hidden; $("pwOk").textContent = "";
@@ -771,6 +808,28 @@
     me.hasPassword = true; applyMe(); $("pwNew").value = ""; $("pwCur").value = "";
     $("pwForm").hidden = true; $("pwOk").textContent = "Password tersimpan. Gunakan password ini saat masuk berikutnya.";
   });
+
+  /* ---------- pembaruan otomatis: banner jika ada versi baru setelah deploy ---------- */
+  (function(){
+    const m = document.querySelector('meta[name="build"]'), mine = m && m.content;
+    if (!mine || mine === "dev") return;
+    let shown = false;
+    async function check(){
+      if (shown) return;
+      try{
+        const r = await fetch("/api/version", { cache: "no-store" }); if (!r.ok) return;
+        const d = await r.json(); if (!d.build || d.build === mine) return;
+        shown = true;
+        const b = document.createElement("button"); b.type = "button";
+        b.textContent = "Ada pembaruan aplikasi \u2014 ketuk untuk memuat ulang";
+        b.style.cssText = "position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:9999;padding:13px 16px;border:0;border-radius:14px;background:#d4a017;color:#111;font:700 14px system-ui,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.4)";
+        b.addEventListener("click", () => location.reload());
+        document.body.appendChild(b);
+      }catch(e){}
+    }
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") check(); });
+    setInterval(check, 5 * 60 * 1000);
+  })();
 
   /* ---------- start ---------- */
   const within = (p, ms) => Promise.race([p, new Promise(res => setTimeout(() => res(null), ms))]); // null bila kelamaan

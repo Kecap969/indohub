@@ -714,3 +714,10 @@ button,a,input,select,summary,label{touch-action:manipulation}
 .pf-acct .pwform{margin:2px 0 0;max-width:none}
 .pf-acct .hint{margin:0;max-width:none}
 .pf-acct .hint:empty{display:none}
+
+/* download aplikasi (profil) */
+.pf-app{margin:14px 0 0}
+.pf-app .btn{width:100%;height:46px;border-radius:14px;font-weight:700;margin-top:8px}
+.pf-app .err{margin:6px 0 0}
+.pf-apphint{margin:8px 0 0;font-size:12px;line-height:1.5;opacity:.7}
+#apkBar{accent-color:var(--accent)}

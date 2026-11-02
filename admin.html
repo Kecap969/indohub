@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <noscript><link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet"></noscript>
-<link rel="stylesheet" href="/style.css?v=10">
+<link rel="stylesheet" href="/style.css?v=11">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icons/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
@@ -110,6 +110,16 @@
         <p class="err" id="qrisErr" role="alert"></p>
         <p class="hint" id="qrisOk" style="margin:6px 0 0"></p>
       </details>
+      <details class="acard" style="margin-top:12px">
+        <summary>Aplikasi Android (APK)</summary>
+        <p class="hint" style="margin-top:12px" id="apkNow">Memuat...</p>
+        <input id="apkFile" type="file" accept=".apk,application/vnd.android.package-archive">
+        <input id="apkVer" type="text" placeholder="Versi (opsional), contoh 1.0.1" maxlength="20" autocomplete="off" style="margin-top:8px;width:100%">
+        <div class="row" style="margin-top:12px"><button class="btn" id="apkBtn" type="button">Upload APK</button></div>
+        <progress id="apkBar" max="100" value="0" hidden style="width:100%;margin-top:8px"></progress>
+        <p class="err" id="apkErr" role="alert"></p>
+        <p class="hint" id="apkOk" style="margin:6px 0 0"></p>
+      </details>
       <p class="err" id="payErr" role="alert"></p>
     </section>
 
@@ -191,7 +201,7 @@
   </nav>
 </div>
 
-<script src="/admin.js?v=10"></script>
+<script src="/admin.js?v=11"></script>
 <script>if("serviceWorker"in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){});});}</script>
 </body>
 </html>

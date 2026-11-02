@@ -96,18 +96,23 @@ app.use((req, res, next) => {
 
 // Halaman tunggal
 const read = (f) => fs.readFileSync(path.join(__dirname, f), "utf8");
-const page = read("index.html");
+// Versi build: berubah otomatis di setiap deploy (Vercel mengisi SHA commit). Dipakai untuk ?v= file statis dan cek pembaruan.
+const BUILD = String(process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_DEPLOYMENT_ID || "dev").slice(0, 12);
+const stamp = (h) => h.replace(/\?v=\d+/g, "?v=" + BUILD).replace("</head>", `<meta name="build" content="${BUILD}">\n</head>`);
+const page = stamp(read("index.html"));
 const css = read("style.css");
 const js = read("app.js");
-const adminPage = read("admin.html");
+const adminPage = stamp(read("admin.html"));
 const adminJs = read("admin.js");
 const manifestJson = read("manifest.json");
 const swJs = read("sw.js");
 const offlinePage = read("offline.html");
-app.get("/", (req, res) => res.type("html").send(page));
-app.get("/style.css", (req, res) => res.type("css").send(css));
-app.get("/app.js", (req, res) => res.type("js").send(js));
-app.get("/admin.js", (req, res) => res.type("js").send(adminJs));
+const fresh = (res) => res.setHeader("Cache-Control", "no-cache"); // simpan boleh, tapi selalu cek versi terbaru dulu
+app.get("/", (req, res) => { fresh(res); res.type("html").send(page); });
+app.get("/style.css", (req, res) => { fresh(res); res.type("css").send(css); });
+app.get("/app.js", (req, res) => { fresh(res); res.type("js").send(js); });
+app.get("/admin.js", (req, res) => { fresh(res); res.type("js").send(adminJs); });
+app.get("/api/version", (req, res) => { res.setHeader("Cache-Control", "no-store"); res.json({ build: BUILD }); });
 
 /* ---------- PWA / aplikasi Android (TWA) ---------- */
 app.get("/manifest.json", (req, res) => { res.setHeader("Cache-Control", "public, max-age=3600"); res.type("application/manifest+json").send(manifestJson); });
@@ -571,6 +576,57 @@ app.get("/api/payment/pending", needUser, needDb, needR2, async (req, res) => {
       proofUrl: p.proof_key ? await signGet(p.proof_key, 3600) : null,
     } });
   } catch (e) { fail(res, e, "Gagal memuat detail pembayaran"); }
+});
+
+/* ---------- aplikasi Android (APK) di bucket: folder apk/ ---------- */
+const APK_KEY = "apk/indohub.apk", APK_INFO_KEY = "apk/info.json", APK_MIME = "application/vnd.android.package-archive";
+async function apkInfo() {
+  let h;
+  try { h = await r2().send(new HeadObjectCommand({ Bucket: bucket(), Key: APK_KEY })); }
+  catch (e) { return { available: false }; }
+  let version = "";
+  try { // label versi diisi admin; dipakai hanya jika cocok dengan file APK yang sekarang (ukuran sama)
+    const o = await r2().send(new GetObjectCommand({ Bucket: bucket(), Key: APK_INFO_KEY }));
+    const j = JSON.parse(await o.Body.transformToString());
+    if (j && j.size === h.ContentLength) version = String(j.version || "");
+  } catch (e) { /* info versi belum ada */ }
+  return { available: true, size: h.ContentLength, updatedAt: h.LastModified, version };
+}
+app.post("/api/admin/apk-presign", needAdmin, needR2, async (req, res) => {
+  const { size, name } = req.body || {};
+  if (!/\.apk$/i.test(String(name || ""))) return res.status(400).json({ error: "File harus berformat .apk" });
+  if (!size || size > SITE.maxUploadMB * 1024 * 1024) return res.status(400).json({ error: `Ukuran file maksimal ${SITE.maxUploadMB} MB` });
+  try { // selalu disimpan sebagai apk/indohub.apk (menimpa versi lama)
+    const uploadUrl = await getSignedUrl(r2(), new PutObjectCommand({ Bucket: bucket(), Key: APK_KEY, ContentType: APK_MIME }), { expiresIn: 900 });
+    res.json({ uploadUrl, contentType: APK_MIME });
+  } catch (e) { fail(res, e, "Gagal membuat URL upload"); }
+});
+app.post("/api/admin/apk-commit", needAdmin, needR2, async (req, res) => {
+  const version = String((req.body || {}).version || "").trim().slice(0, 20);
+  if (version && !/^[\w.+\- ]+$/.test(version)) return res.status(400).json({ error: "Versi hanya boleh huruf, angka, titik, minus, plus" });
+  try {
+    const info = await apkInfo();
+    if (!info.available) return res.status(400).json({ error: "File APK belum terupload" });
+    await r2().send(new PutObjectCommand({ Bucket: bucket(), Key: APK_INFO_KEY, Body: JSON.stringify({ version, size: info.size }), ContentType: "application/json" }));
+    res.json({ ok: true, ...(await apkInfo()) });
+  } catch (e) { fail(res, e, "Gagal menyimpan info APK"); }
+});
+app.get("/api/admin/apk", needAdmin, needR2, async (req, res) => {
+  try { res.setHeader("Cache-Control", "no-store"); res.json(await apkInfo()); }
+  catch (e) { fail(res, e, "Gagal memuat info APK"); }
+});
+// untuk pengguna (halaman profil): info + link unduhan sementara (1 jam)
+app.get("/api/app", needUser, needR2, async (req, res) => {
+  try {
+    res.setHeader("Cache-Control", "no-store");
+    const info = await apkInfo();
+    if (!info.available) return res.json({ available: false });
+    const url = await getSignedUrl(r2(), new GetObjectCommand({
+      Bucket: bucket(), Key: APK_KEY,
+      ResponseContentDisposition: 'attachment; filename="Indohub.apk"', ResponseContentType: APK_MIME,
+    }), { expiresIn: 3600 });
+    res.json({ ...info, url });
+  } catch (e) { fail(res, e, "Gagal memuat aplikasi"); }
 });
 
 /* ---------- pembayaran: sisi admin ---------- */
