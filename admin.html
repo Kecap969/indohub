@@ -640,7 +640,7 @@
 
     const lock = v => { [btn, $("file"), $("albumSel"), $("albumNew"), ...document.querySelectorAll("input[name=cat]")].forEach(x => { x.disabled = v; }); };
     lock(true);
-    const failed = [], failMsg = []; let done = 0, skipped = 0, lastAlbum = album;
+    const failed = [], failMsg = [], skipMsg = []; let done = 0, skipped = 0, lastAlbum = album;
     doneBytes = 0; $("upFail").innerHTML = ""; $("upSum").hidden = false; $("upSum").classList.add("active");
     for (let i = 0; i < queue.length; i++){
       const q = queue[i]; curIdx = i; q.dup = false;
@@ -648,7 +648,7 @@
       showProgress(0, "memulai");
       try{
         lastAlbum = await uploadOne(q, category, album) || lastAlbum;
-        if (q.dup){ skipped++; }
+        if (q.dup){ skipped++; skipMsg.push({ name: q.f.name, msg: "Sudah ada" + (q.dup !== true ? " di " + q.dup : "") + " \u2014 dilewati" }); }
         else{
           done++;
           if (q.noThumb) thumbPending.push({ f: q.f, key: q.key, album: q.album });
@@ -663,8 +663,8 @@
     $("upSum").classList.remove("active");
     $("upName").textContent = failed.length ? "Selesai dengan " + failed.length + " gagal" : "Semua selesai ✓";
     $("upDet").textContent = done + " berhasil" + (skipped ? " \u00b7 " + skipped + " dilewati (sudah ada)" : "") + (failed.length ? " \u00b7 " + failed.length + " gagal" : "");
-    failMsg.forEach(m => { // hanya file yang gagal yang ditampilkan sebagai daftar
-      const li = el("li", "failrow"), top = el("div", "uptop");
+    [...failMsg.map(m => ({ ...m, cls: "failrow" })), ...skipMsg.map(m => ({ ...m, cls: "skiprow" }))].forEach(m => { // hanya file gagal & duplikat yang tampil sebagai daftar
+      const li = el("li", m.cls), top = el("div", "uptop");
       top.append(el("span", "upname", m.name), el("span", "upst", m.msg)); li.appendChild(top); $("upFail").appendChild(li);
     });
     lock(false);

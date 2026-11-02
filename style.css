@@ -328,6 +328,7 @@ small{color:var(--muted)}
 .upsum progress{display:block;height:8px;margin-top:8px}
 .upsum small{display:block;margin-top:6px;color:var(--muted)}
 .upsum .upst{font-weight:700;color:var(--ink)}
+.uplist li.skiprow .upst{white-space:normal;text-align:right}
 .uplist li.failrow{border-color:var(--err)}
 .uplist li.failrow .upst{color:var(--err);font-weight:600;white-space:normal;text-align:right}
 
