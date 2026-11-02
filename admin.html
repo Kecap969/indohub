@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#eef1f4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f161d" media="(prefers-color-scheme: dark)">
+<title>Admin · Indohub</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet"></noscript>
+<link rel="stylesheet" href="/style.css?v=11">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icons/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Indohub">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+</head>
+<body>
+
+<!-- Dashboard admin (login lewat halaman utama /) -->
+<div id="admin" hidden>
+  <header class="topbar atop">
+    <h1 id="aTitle">Beranda</h1>
+    <button class="btn ghost" id="aOut" type="button">Keluar</button>
+  </header>
+
+  <main class="wrap">
+    <p class="err" id="aerr" role="alert"></p>
+
+    <!-- Beranda -->
+    <section class="apane" id="pane-home" aria-label="Beranda">
+      <div class="astats" id="homeStats"></div>
+      <div class="acard todo" id="todoCard" hidden>
+        <div><b id="todoTxt"></b><small>Periksa bukti transfernya lalu setujui atau tolak.</small></div>
+        <button class="btn" id="todoBtn" type="button">Periksa</button>
+      </div>
+      <h2 class="ah">Upload terbaru</h2>
+      <ul class="alist" id="recentList"></ul>
+    </section>
+
+    <!-- Media -->
+    <section class="apane" id="pane-media" aria-label="Media" hidden>
+      <details class="acard" id="upDetails">
+        <summary>Upload video atau audio</summary>
+        <div class="row" style="margin-top:12px">
+          <input id="file" type="file" accept="video/*,audio/*" multiple>
+        </div>
+        <fieldset class="seg" aria-label="Kategori">
+          <label><input type="radio" name="cat" value="free" checked><span>Gratis</span></label>
+          <label><input type="radio" name="cat" value="premium"><span>Premium</span></label>
+        </fieldset>
+        <div class="row albumrow" id="albumRow">
+          <label for="albumSel" id="albumSelLbl">Album</label>
+          <select id="albumSel"></select>
+          <input id="albumNew" type="text" maxlength="40" placeholder="Nama album baru" autocomplete="off">
+        </div>
+        <div class="row" style="margin-top:12px"><button class="btn" id="uploadBtn" type="button">Upload</button></div>
+        <div class="upsum" id="upSum" hidden>
+          <div class="uptop"><span class="upname" id="upName"></span><span class="upst" id="upPct"></span></div>
+          <progress id="upBar" max="100" value="0"></progress>
+          <small id="upDet"></small>
+        </div>
+        <ul class="uplist" id="upFail"></ul>
+                <p class="err" id="upErr" role="alert"></p>
+        <p class="hint" id="upOk" style="margin:6px 0 0"></p>
+      </details>
+      <!-- daftar folder -->
+      <div id="folderView">
+        <div class="achips" id="mediaChips" role="group" aria-label="Filter kategori"></div>
+        <div class="tools"><input type="search" id="q" placeholder="Cari folder atau judul file"></div>
+        <div class="folders" id="folders"></div>
+      </div>
+
+      <!-- isi satu folder -->
+      <div id="fileView" hidden>
+        <div class="fhead">
+          <button class="btn ghost" id="fBack" type="button">&larr; Semua folder</button>
+          <div class="ftitle">
+            <h2><span id="fName"></span> <span id="fPill" class="pill"></span></h2>
+            <small id="fMeta"></small>
+          </div>
+        </div>
+        <div class="fbar">
+          <button class="btn" id="fUp" type="button">Upload ke folder ini</button>
+          <button class="btn ghost" id="fRename" type="button">Ganti nama</button>
+          <button class="btn ghost warn" id="fDel" type="button">Hapus folder</button>
+        </div>
+        <div class="tools">
+          <input type="search" id="fq" placeholder="Cari di folder ini">
+          <label><input type="checkbox" id="all"> Pilih semua</label>
+        </div>
+        <ul class="alist" id="alist"></ul>
+      </div>
+    </section>
+
+    <!-- Pembayaran -->
+    <section class="apane" id="pane-pay" aria-label="Pembayaran" hidden>
+      <div class="achips" id="payChips" role="group" aria-label="Filter status"></div>
+      <ul class="plist" id="payList"></ul>
+      <details class="acard" style="margin-top:16px">
+        <summary>Pengaturan QRIS &amp; harga</summary>
+        <p class="hint" style="margin-top:12px">Harga langganan saat ini: <b id="priceTxt">-</b></p>
+        <div class="row">
+          <label class="hint" style="flex:1 1 140px">1 bulan (Rp)<input class="pricein" id="price1" type="number" inputmode="numeric" min="1000" max="10000000" step="500"></label>
+          <label class="hint" style="flex:1 1 140px">1 tahun (Rp)<input class="pricein" id="price12" type="number" inputmode="numeric" min="1000" max="10000000" step="500"></label>
+        </div>
+        <div class="row" style="margin-top:10px"><button class="btn" id="priceBtn" type="button">Simpan harga</button></div>
+        <p class="err" id="priceErr" role="alert"></p>
+        <p class="hint" id="priceOk" style="margin:6px 0 0"></p>
+        <p class="hint" style="margin:18px 0 8px;padding-top:14px;border-top:1px solid var(--line)">QRIS pembayaran</p>
+        <div class="row">
+          <img id="qrisPrev" class="qprev" alt="QRIS saat ini" hidden>
+          <input id="qrisFile" type="file" accept="image/*">
+          <button class="btn" id="qrisBtn" type="button">Simpan QRIS</button>
+        </div>
+        <p class="err" id="qrisErr" role="alert"></p>
+        <p class="hint" id="qrisOk" style="margin:6px 0 0"></p>
+      </details>
+      <details class="acard" style="margin-top:12px">
+        <summary>Aplikasi Android (APK)</summary>
+        <p class="hint" style="margin-top:12px" id="apkNow">Memuat...</p>
+        <input id="apkFile" type="file" accept=".apk,application/vnd.android.package-archive">
+        <input id="apkVer" type="text" placeholder="Versi (opsional), contoh 1.0.1" maxlength="20" autocomplete="off" style="margin-top:8px;width:100%">
+        <div class="row" style="margin-top:12px"><button class="btn" id="apkBtn" type="button">Upload APK</button></div>
+        <progress id="apkBar" max="100" value="0" hidden style="width:100%;margin-top:8px"></progress>
+        <p class="err" id="apkErr" role="alert"></p>
+        <p class="hint" id="apkOk" style="margin:6px 0 0"></p>
+      </details>
+      <p class="err" id="payErr" role="alert"></p>
+    </section>
+
+    <!-- Pengguna -->
+    <section class="apane" id="pane-users" aria-label="Pengguna" hidden>
+      <details class="acard" id="nfDetails">
+        <summary>Kirim notifikasi</summary>
+        <div class="nfform">
+          <label for="nfTo">Kirim ke</label>
+          <select id="nfTo"></select>
+          <label for="nfTitle">Judul</label>
+          <input id="nfTitle" type="text" maxlength="80" placeholder="mis. Album baru sudah tayang" autocomplete="off">
+          <label for="nfBody">Isi pesan (opsional)</label>
+          <textarea id="nfBody" rows="3" maxlength="300" placeholder="Tulis pesan singkat"></textarea>
+          <button class="btn" id="nfBtn" type="button">Kirim</button>
+          <p class="err" id="nfErr" role="alert"></p>
+          <p class="hint" id="nfOk" style="margin:0"></p>
+        </div>
+      </details>
+      <div class="tools"><input type="search" id="uq" placeholder="Cari pengguna"></div>
+      <div class="achips" id="userChips" role="group" aria-label="Filter pengguna"></div>
+      <ul class="plist" id="userList"></ul>
+    </section>
+  </main>
+
+  <div class="selbar" id="selBar" hidden>
+    <span id="selTxt"></span>
+    <div class="selact">
+      <button class="btn ghost" id="mvBtn" type="button">Pindahkan</button>
+      <button class="btn danger" id="del" type="button">Hapus</button>
+    </div>
+  </div>
+
+  <!-- Pindahkan file antara Gratis dan Premium -->
+  <div class="sheet" id="mvSheet" hidden role="dialog" aria-modal="true" aria-label="Pindahkan file">
+    <div class="sheet-bg" id="mvBg"></div>
+    <div class="sheet-box">
+      <div class="grab" aria-hidden="true"></div>
+      <button type="button" class="sclose" id="mvClose" aria-label="Tutup">&times;</button>
+      <h2 id="mvTitle">Pindahkan file</h2>
+      <p class="hint" id="mvInfo"></p>
+      <p class="mvlbl">Pindahkan ke</p>
+      <fieldset class="seg" aria-label="Tujuan">
+        <label><input type="radio" name="mvcat" value="free"><span>Gratis</span></label>
+        <label><input type="radio" name="mvcat" value="premium" checked><span>Premium</span></label>
+      </fieldset>
+      <div id="mvAlbumBox">
+        <label class="mvlbl" for="mvAlbum">Album tujuan</label>
+        <select id="mvAlbum"></select>
+        <input id="mvNew" type="text" maxlength="40" placeholder="Nama album baru" autocomplete="off">
+      </div>
+      <p class="hint" id="mvFreeNote" hidden>Video gratis tampil langsung di Home tanpa folder.</p>
+      <p class="err" id="mvErr" role="alert"></p>
+      <button class="btn" id="mvGo" type="button">Pindahkan</button>
+    </div>
+  </div>
+
+  <!-- Moderasi komentar satu video -->
+  <div class="sheet" id="cmSheet" hidden role="dialog" aria-modal="true" aria-label="Komentar video">
+    <div class="sheet-bg" id="cmBg"></div>
+    <div class="sheet-box">
+      <div class="grab" aria-hidden="true"></div>
+      <button type="button" class="sclose" id="cmClose" aria-label="Tutup">&times;</button>
+      <h2 id="cmTitle">Komentar</h2>
+      <ul class="cmlist" id="cmList"></ul>
+      <p class="err" id="cmErr" role="alert"></p>
+    </div>
+  </div>
+
+  <nav class="bottomnav" aria-label="Navigasi admin">
+    <div class="abrand" aria-hidden="true">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z"/></svg></span>
+      <span><b>Indohub</b><small>Dashboard admin</small></span>
+    </div>
+    <button type="button" data-tab="home" aria-current="page"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10"/></svg>Beranda</button>
+    <button type="button" data-tab="media"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M10 9.5v5l4.5-2.5z"/></svg>Media</button>
+    <button type="button" data-tab="pay"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10.5h18"/><path d="M7 15h3"/></svg>Bayar<i class="dot" id="payDot" hidden></i></button>
+    <button type="button" data-tab="users"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 5.2a3.4 3.4 0 0 1 0 6.6"/><path d="M18.5 14.8c1.6.8 2.7 2.4 3 5.2"/></svg>Pengguna</button>
+  </nav>
+</div>
+
+<script>
+// Dashboard admin (halaman terpisah: /admin). Login tetap di halaman utama (index).
+(function(){
+  const $ = id => document.getElementById(id);
+  const TOKEN_KEY = "admin_token", MSG_KEY = "gate_msg";
+  let cfg = { maxUploadMB:2048 };
+  let items = [], pays = [], users = [], token = "", tab = "home";
+  const F = { media:"all", pay:"pending", user:"all" }; // filter aktif tiap tab
+
+  const store = area => ({
+    get(k){ try{ return area.getItem(k) || ""; }catch(e){ return ""; } },
+    set(k,v){ try{ area.setItem(k,v); }catch(e){} },
+    del(k){ try{ area.removeItem(k); }catch(e){} }
+  });
+  const ss = store(window.sessionStorage);
+  const rupiah = n => "Rp" + Number(n).toLocaleString("id-ID");
+  const durTxt = m => m % 12 === 0 ? (m / 12) + " thn" : m + " bln";
+  const fmtDate = d => new Date(d).toLocaleDateString("id-ID", { day:"numeric", month:"short", year:"numeric" });
+  const fmtDateTime = d => new Date(d).toLocaleString("id-ID", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" });
+  const fmtSize = b => b >= 1073741824 ? (b/1073741824).toFixed(1)+" GB" : b >= 1048576 ? (b/1048576).toFixed(1)+" MB" : Math.max(1,Math.round(b/1024))+" KB";
+  const ts = it => new Date(it.lastModified).getTime();
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const CATNAME = { free:"Gratis", premium:"Premium" };
+  const isActive = u => !!(u.premiumUntil && new Date(u.premiumUntil) > new Date());
+
+  async function api(path, body, method){
+    const o = { method: method || (body ? "POST" : "GET"), headers: {} };
+    if (token) o.headers.Authorization = "Bearer " + token;
+    if (body){ o.headers["Content-Type"] = "application/json"; o.body = JSON.stringify(body); }
+    const r = await fetch(path, o); let d = {};
+    try{ d = await r.json(); }catch(e){}
+    return { ok: r.ok, status: r.status, d };
+  }
+  function putFile(url, file, type, onProg){
+    return new Promise((resolve, reject) => {
+      const x = new XMLHttpRequest();
+      x.open("PUT", url); x.setRequestHeader("Content-Type", type);
+      x.upload.onprogress = e => { if (e.lengthComputable && onProg) onProg(Math.round(e.loaded / e.total * 100)); };
+      x.onload = () => x.status >= 200 && x.status < 300 ? resolve() : reject(new Error("Upload ditolak (kode " + x.status + ")"));
+      x.onerror = () => reject(new Error("Upload gagal. Periksa koneksi dan pengaturan CORS penyimpanan (method PUT dan header Content-Type harus diizinkan)."));
+      x.send(file);
+    });
+  }
+  function albumsOf(cat){
+    const map = new Map();
+    items.filter(i => i.category === cat).forEach(i => {
+      const k = i.album.toLowerCase();
+      if (!map.has(k)) map.set(k, { name: i.album, list: [], latest: 0 });
+      const a = map.get(k); a.list.push(i); a.latest = Math.max(a.latest, ts(i));
+    });
+    return [...map.values()].sort((a,b) => b.latest - a.latest);
+  }
+  async function fetchItems(){
+    const r = await api("/api/list");
+    if (!r.ok) throw new Error(r.d.error || "Gagal memuat daftar");
+    return r.d.items;
+  }
+
+  // balik ke halaman login (index)
+  function toLogin(msg){ ss.del(TOKEN_KEY); if (msg) ss.set(MSG_KEY, msg); location.replace("/"); }
+  function adminExpired(){ toLogin("Sesi admin habis, silakan masuk lagi"); }
+  $("aOut").addEventListener("click", () => toLogin(""));
+
+  /* ---------- tab & navbar bawah ---------- */
+  const TITLES = { home:"Beranda", media:"Media", pay:"Pembayaran", users:"Pengguna" };
+  function setTab(name){
+    if (!TITLES[name]) name = "home";
+    tab = name; $("aTitle").textContent = TITLES[name];
+    Object.keys(TITLES).forEach(t => { $("pane-" + t).hidden = t !== name; });
+    document.querySelectorAll(".bottomnav button").forEach(b => {
+      if (b.dataset.tab === name) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+    });
+    if (location.hash !== "#" + name) history.replaceState(null, "", "#" + name);
+    sync(); window.scrollTo(0, 0);
+  }
+  document.querySelectorAll(".bottomnav button").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
+  window.addEventListener("hashchange", () => { const n = location.hash.slice(1); if (TITLES[n] && n !== tab) setTab(n); });
+
+  // deretan filter (chip)
+  function chips(box, opts, cur, onPick){
+    box.innerHTML = "";
+    opts.forEach(o => {
+      const b = el("button", "chip" + (o.v === cur ? " on" : ""), o.t); b.type = "button";
+      b.setAttribute("aria-pressed", String(o.v === cur));
+      if (o.n != null) b.append(" ", el("small", "", String(o.n)));
+      b.addEventListener("click", () => onPick(o.v));
+      box.appendChild(b);
+    });
+  }
+
+  /* ---------- muat data ---------- */
+  async function loadMedia(keepAlbum){
+    $("aerr").textContent = "";
+    const prevSel = $("albumSel").value;
+    try{ items = await fetchItems(); }catch(ex){ items = []; $("aerr").textContent = ex.message; }
+    refreshAlbumChoices();
+    const opts = [...$("albumSel").options];
+    if (keepAlbum){ const o = opts.find(o => o.value.toLowerCase() === keepAlbum.toLowerCase()); if (o){ $("albumSel").value = o.value; toggleNew(); } }
+    else if (prevSel && opts.some(o => o.value === prevSel)){ $("albumSel").value = prevSel; toggleNew(); }
+    if (!items.length) $("upDetails").open = true;
+    renderMedia(); renderHome(); showDurBtn();
+  }
+  async function loadPay(){
+    try{
+      const r = await api("/api/admin/overview");
+      if (r.status === 401){ adminExpired(); return; }
+      if (!r.ok) throw new Error(r.d.error || "Gagal memuat data pembayaran");
+      pays = r.d.payments || []; users = r.d.users || [];
+      const pl = r.d.plans;
+      $("priceTxt").textContent = pl ? rupiah(pl[1]) + " / bulan · " + rupiah(pl[12]) + " / tahun" : "Belum diatur";
+      if (pl){ // jangan menimpa isian yang sedang diketik
+        if (document.activeElement !== $("price1")) $("price1").value = pl[1];
+        if (document.activeElement !== $("price12")) $("price12").value = pl[12];
+      }
+      const q = $("qrisPrev"); q.hidden = !r.d.qris; if (r.d.qris) q.src = r.d.qris;
+      $("payErr").textContent = "";
+      renderPays(); renderUsers(); fillNotifyTargets(); renderHome(); updateDot();
+    }catch(e){ $("payErr").textContent = e.message; }
+  }
+  const pendingCount = () => pays.filter(p => p.status === "pending").length;
+  function updateDot(){
+    const n = pendingCount(), d = $("payDot");
+    d.hidden = !n; d.textContent = n > 99 ? "99+" : String(n);
+  }
+
+  /* ---------- beranda ---------- */
+  function goPay(status){ F.pay = status; renderPays(); setTab("pay"); }
+  function renderHome(){
+    const pend = pendingCount();
+    const albums = new Set(items.map(i => i.category + "/" + i.album.toLowerCase())).size;
+    const S = p => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + p + '</svg>';
+    const IC = {
+      file: S('<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M10 9.5v5l4.5-2.5z"/>'),
+      disk: S('<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>'),
+      album: S('<path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H9l2 2.5h7.5A2.5 2.5 0 0 1 21 9v8.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5v-11z"/>'),
+      users: S('<circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 5.2a3.4 3.4 0 0 1 0 6.6"/><path d="M18.5 14.8c1.6.8 2.7 2.4 3 5.2"/>'),
+      crown: S('<path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5L3 8z"/>'),
+      clock: S('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+    };
+    const cards = [
+      ["File", items.length, () => setTab("media"), IC.file, "#2f5bff"],
+      ["Total ukuran", fmtSize(items.reduce((a, i) => a + i.size, 0)), () => setTab("media"), IC.disk, "#7b5cff"],
+      ["Album", albums, () => setTab("media"), IC.album, "#0e9aa7"],
+      ["Pengguna", users.length, () => { F.user = "all"; renderUsers(); setTab("users"); }, IC.users, "#2f8f5b"],
+      ["Premium aktif", users.filter(isActive).length, () => { F.user = "premium"; renderUsers(); setTab("users"); }, IC.crown, "#b7791f"],
+      ["Menunggu verifikasi", pend, () => goPay("pending"), IC.clock, "#d98a00"],
+    ];
+    const box = $("homeStats"); box.innerHTML = "";
+    cards.forEach(([label, val, go, icon, color]) => {
+      const b = el("button", "astat" + (label === "Menunggu verifikasi" && pend ? " hot" : "")); b.type = "button";
+      b.style.setProperty("--c", color);
+      const ic = el("span", "aic"); ic.innerHTML = icon; ic.setAttribute("aria-hidden", "true");
+      b.append(ic, el("b", "", String(val)), el("span", "", label));
+      b.addEventListener("click", go); box.appendChild(b);
+    });
+    $("todoCard").hidden = !pend;
+    if (pend) $("todoTxt").textContent = pend + " bukti transfer menunggu verifikasi";
+
+    const ul = $("recentList"); ul.innerHTML = "";
+    const recent = items.slice(0, 5);
+    if (!recent.length){ const li = el("li", "empty", "Belum ada media. Upload dulu di tab Media."); li.style.display = "block"; ul.appendChild(li); return; }
+    recent.forEach(it => {
+      const li = el("li", "recent"), mid = el("div");
+      const nm = el("div", "name", it.title); nm.append(" ", el("span", "pill " + it.category, CATNAME[it.category]));
+      mid.append(nm, el("div", "meta", it.album + " · " + fmtSize(it.size) + " · " + fmtDateTime(it.lastModified)));
+      li.appendChild(mid); ul.appendChild(li);
+    });
+  }
+  $("todoBtn").addEventListener("click", () => goPay("pending"));
+
+  /* ---------- media: upload ---------- */
+  const NEW = "__new__";
+  const catVal = () => document.querySelector('input[name=cat]:checked').value;
+  function refreshAlbumChoices(){
+    const sel = $("albumSel"), names = albumsOf(catVal()).map(a => a.name);
+    sel.innerHTML = "";
+    names.forEach(n => { const o = el("option", "", n); o.value = n; sel.appendChild(o); });
+    const o = el("option", "", "+ Buat album baru"); o.value = NEW; sel.appendChild(o);
+    const none = !names.length;
+    sel.hidden = none; $("albumSelLbl").hidden = none;
+    if (none) sel.value = NEW;
+    $("albumRow").hidden = catVal() === "free"; // video gratis tidak memakai album
+    toggleNew();
+  }
+  function toggleNew(){
+    const isNew = $("albumSel").value === NEW;
+    $("albumNew").hidden = !isNew;
+    if (!isNew) $("albumNew").value = "";
+  }
+  document.querySelectorAll('input[name=cat]').forEach(r => r.addEventListener("change", refreshAlbumChoices));
+  $("albumSel").addEventListener("change", () => { toggleNew(); if (!$("albumNew").hidden) $("albumNew").focus(); });
+
+  function chosenAlbum(){
+    if (catVal() === "free") return "Umum"; // folder internal; pengguna melihat semua video gratis langsung di Home
+    if ($("albumSel").value !== NEW) return $("albumSel").value;
+    const typed = $("albumNew").value.replace(/[^\p{L}\p{N} _-]/gu, "").replace(/\s+/g, " ").trim();
+    const same = albumsOf(catVal()).find(a => a.name.toLowerCase() === typed.toLowerCase()); // jangan buat album ganda
+    return same ? same.name : typed;
+  }
+
+  // ambil 1 frame BAGUS dari video lokal (di browser admin) sebagai JPEG kecil.
+  // Mencoba beberapa titik waktu, menunggu frame benar-benar siap digambar, dan melewati frame hitam/kosong.
+  // Hasil null = browser tidak bisa membaca gambar video ini (mis. codec tidak didukung) atau semua frame kosong.
+  function makeThumb(file){
+    return new Promise(resolve => {
+      const url = URL.createObjectURL(file), v = document.createElement("video");
+      let done = false, busy = false, timer = 0, idx = 0, times = [], best = null;
+      const finish = () => end(best && best.score >= 2 ? best.blob : null);
+      const end = blob => { if (done) return; done = true; clearTimeout(timer); URL.revokeObjectURL(url); v.removeAttribute("src"); v.load(); resolve(blob); };
+      const arm = ms => { clearTimeout(timer); timer = setTimeout(finish, ms); }; // batas waktu per tahap, bukan total
+      v.muted = true; v.playsInline = true; v.preload = "metadata";
+
+      function frameReady(cb){ // tunggu sampai frame hasil seek benar-benar tampil (bila tidak, gambar bisa hitam)
+        let fired = false; const go = () => { if (!fired){ fired = true; cb(); } };
+        if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(go);
+        setTimeout(go, v.requestVideoFrameCallback ? 400 : 200);
+      }
+      function nextShot(){
+        busy = false;
+        if (done) return;
+        if (idx >= times.length) return finish();
+        arm(25000);
+        const t = times[idx++];
+        if (Math.abs(v.currentTime - t) < 0.01 && v.readyState >= 2) return grab(); // waktu sama: event seeked tidak datang
+        v.currentTime = t;
+      }
+      function grab(){
+        if (done || busy) return; busy = true;
+        frameReady(() => {
+          if (done) return;
+          try{
+            const w = 480, h = Math.max(2, Math.round(w * v.videoHeight / v.videoWidth));
+            const c = document.createElement("canvas"); c.width = w; c.height = h;
+            const g = c.getContext("2d"); g.drawImage(v, 0, 0, w, h);
+            const px = g.getImageData(0, 0, w, h).data; let n = 0, sum = 0, sum2 = 0;
+            for (let i = 0; i < px.length; i += 4 * 97){ const l = .299 * px[i] + .587 * px[i + 1] + .114 * px[i + 2]; sum += l; sum2 += l * l; n++; }
+            const mean = sum / n, sd = Math.sqrt(Math.max(0, sum2 / n - mean * mean));
+            c.toBlob(blob => {
+              if (done) return;
+              if (blob && blob.size > 0){ const score = sd + Math.min(mean, 60) / 6; if (!best || score > best.score) best = { blob, score }; }
+              if (blob && mean > 18 && sd > 8) return end(blob); // frame bagus: selesai
+              nextShot();                                          // frame gelap/kosong: coba titik lain
+            }, "image/jpeg", 0.8);
+          }catch(e){ nextShot(); }
+        });
+      }
+      v.onloadedmetadata = () => {
+        if (!v.videoWidth || !v.videoHeight) return end(null); // tidak ada gambar yang bisa didecode
+        const d = isFinite(v.duration) && v.duration > 0 ? v.duration : 2;
+        times = [...new Set([Math.min(1, d * .1), Math.min(4, d * .3), d * .5, d * .8].map(t => +Math.min(t, Math.max(d - .1, 0)).toFixed(2)))];
+        nextShot();
+      };
+      v.onseeked = grab;
+      v.onerror = () => finish();
+      arm(30000); // memuat metadata file besar bisa lama
+      v.src = url;
+    });
+  }
+
+  // durasi media (detik) dari file lokal atau link; 0 bila tidak terbaca
+  function probeDuration(src, kind, release){
+    return new Promise(resolve => {
+      const m = document.createElement(kind === "audio" ? "audio" : "video");
+      let done = false, timer = 0;
+      const end = d => { if (done) return; done = true; clearTimeout(timer); if (release) release(); m.removeAttribute("src"); m.load(); resolve(isFinite(d) && d > 0 ? Math.max(1, Math.round(d)) : 0); };
+      timer = setTimeout(() => end(0), 25000);
+      m.preload = "metadata"; m.muted = true;
+      m.onloadedmetadata = () => {
+        if (isFinite(m.duration)) return end(m.duration);
+        m.ontimeupdate = () => { if (isFinite(m.duration)){ m.ontimeupdate = null; end(m.duration); } }; // webm rekaman: durasi Infinity, paksa ke ujung
+        m.currentTime = 1e7;
+      };
+      m.onerror = () => end(0);
+      m.src = src;
+    });
+  }
+  const probeFile = f => { const u = URL.createObjectURL(f); return probeDuration(u, /^audio\//.test(typeOf(f)) ? "audio" : "video", () => URL.revokeObjectURL(u)); };
+  async function saveDurations(map){
+    const r = await fetch("/api/admin/durations", {
+      method: "POST", headers: {"Content-Type":"application/json","Authorization":"Bearer "+token}, body: JSON.stringify({ durations: map })
+    });
+    if (r.status === 401){ adminExpired(); throw new Error("Sesi habis"); }
+    if (!r.ok){ let d = {}; try{ d = await r.json(); }catch(e){} throw new Error(d.error || "Gagal menyimpan durasi"); }
+  }
+  // isi durasi untuk media lama yang belum punya (sekali jalan; setelah itu semua pengguna melihat durasinya)
+  let durBtn = null, durBusy = false;
+  const missingDur = () => items.filter(i => i.url && !i.duration);
+  function showDurBtn(){
+    if (!durBtn){
+      durBtn = el("button", "btn ghost", ""); durBtn.type = "button";
+      $("folders").before(durBtn); durBtn.addEventListener("click", fillDurations);
+    }
+    const n = missingDur().length;
+    durBtn.hidden = !n && !durBusy;
+    if (!durBusy) durBtn.textContent = "Isi durasi media lama (" + n + ")";
+  }
+  async function fillDurations(){
+    const todo = missingDur(); if (!todo.length || durBusy) return;
+    durBusy = true; durBtn.disabled = true; $("aerr").textContent = "";
+    let got = {}, n = 0, bad = 0, aborted = false;
+    const flush = async () => { if (Object.keys(got).length){ const g = got; got = {}; await saveDurations(g); } };
+    try{
+      for (const it of todo){
+        durBtn.textContent = "Memeriksa durasi " + (++n) + "/" + todo.length + "...";
+        const sec = await probeDuration(it.url, it.type, null);
+        if (sec) got[it.key] = sec; else bad++;
+        if (Object.keys(got).length >= 20) await flush();
+      }
+      await flush();
+    }catch(e){ aborted = true; if (e.message !== "Sesi habis") $("aerr").textContent = e.message; }
+    durBusy = false; durBtn.disabled = false;
+    await loadMedia(); // loadMedia mengosongkan pesan, jadi pesan ditulis sesudahnya
+    if (!aborted && bad) $("aerr").textContent = bad + " file tidak terbaca durasinya.";
+    else if (aborted && $("aerr").textContent === "") $("aerr").textContent = "Pengisian durasi terhenti. Tekan tombolnya lagi untuk melanjutkan.";
+  }
+
+  // unggah thumbnail ke R2: cek hasil tiap langkah, ulangi sampai 3x (jaringan putus-nyambung tidak lagi membuat thumbnail hilang diam-diam)
+  async function uploadThumb(key, blob){
+    let last;
+    for (let a = 0; a < 3; a++){
+      try{
+        const tr = await fetch("/api/presign-thumb", {
+          method: "POST", headers: {"Content-Type":"application/json","Authorization":"Bearer "+token},
+          body: JSON.stringify({ key })
+        });
+        if (tr.status === 401){ adminExpired(); throw new Error("Sesi habis"); }
+        const td = await tr.json();
+        if (!tr.ok) throw new Error(td.error || "Gagal meminta URL thumbnail");
+        const pr = await fetch(td.uploadUrl, { method: "PUT", headers: {"Content-Type":"image/jpeg"}, body: blob });
+        if (!pr.ok) throw new Error("Thumbnail ditolak (kode " + pr.status + ")");
+        return;
+      }catch(e){ last = e; if (e.message === "Sesi habis") throw e; await new Promise(r => setTimeout(r, 700 * (a + 1))); }
+    }
+    throw last;
+  }
+  async function makeAndUploadThumb(f, key){
+    let blob = null;
+    for (let a = 0; a < 2 && !blob; a++) blob = await makeThumb(f); // sekali lagi bila gagal (mis. kehabisan waktu)
+    if (!blob) throw new Error("Frame video tidak bisa dibaca browser");
+    await uploadThumb(key, blob);
+  }
+
+  // video yang sudah terunggah tetapi thumbnail-nya gagal: file lokal disimpan supaya bisa dicoba lagi tanpa upload ulang
+  let thumbPending = [], thumbBtn = null;
+  function showThumbBtn(){
+    if (!thumbBtn){
+      thumbBtn = el("button", "btn ghost", ""); thumbBtn.type = "button";
+      $("upOk").after(thumbBtn); thumbBtn.addEventListener("click", retryThumbs);
+    }
+    thumbBtn.hidden = !thumbPending.length;
+    thumbBtn.textContent = "Coba buat thumbnail lagi (" + thumbPending.length + ")";
+  }
+  async function retryThumbs(){
+    thumbBtn.disabled = true; const still = []; let album = "";
+    for (const p of thumbPending){
+      $("upOk").textContent = "Membuat thumbnail " + (thumbPending.indexOf(p) + 1) + " dari " + thumbPending.length + "..."; album = p.album;
+      try{ await makeAndUploadThumb(p.f, p.key); }
+      catch(e){
+        still.push(p);
+        if (e.message === "Sesi habis"){ still.push(...thumbPending.slice(thumbPending.indexOf(p) + 1)); break; }
+      }
+    }
+    thumbPending = still; thumbBtn.disabled = false; showThumbBtn();
+    $("upOk").textContent = still.length ? still.length + " video masih tanpa thumbnail." : "Semua thumbnail berhasil dibuat.";
+    if (album) await loadMedia(album);
+  }
+
+  /* ---------- upload banyak file sekaligus (antrean, satu per satu, satu progres bar) ---------- */
+  let queue = []; // [{ f }]
+  const typeOf = f => f.type || (/\.(mp4|m4v|mov)$/i.test(f.name) ? "video/mp4" : /\.mp3$/i.test(f.name) ? "audio/mpeg" : "");
+  const totalBytes = () => queue.reduce((a, q) => a + q.f.size, 0) || 1;
+  let doneBytes = 0, curIdx = 0; // byte file yang sudah selesai/dilewati/gagal, dan nomor file yang sedang diproses
+  function showProgress(curPct, det){ // satu bar untuk seluruh antrean, dihitung dari ukuran byte
+    const cur = queue[curIdx], part = cur ? cur.f.size * (curPct || 0) / 100 : 0;
+    const pct = Math.min(100, Math.round((doneBytes + part) / totalBytes() * 100));
+    $("upBar").value = pct; $("upPct").textContent = pct + "%";
+    if (cur) $("upName").textContent = cur.f.name;
+    $("upDet").textContent = "File " + (curIdx + 1) + " dari " + queue.length + " \u00b7 " + fmtSize(doneBytes + part) + " dari " + fmtSize(totalBytes()) + (det ? " \u00b7 " + det : "");
+  }
+  function renderQueue(){
+    queue = [...$("file").files].map(f => ({ f })); doneBytes = 0; curIdx = 0;
+    $("upFail").innerHTML = "";
+    const sum = $("upSum"); sum.hidden = !queue.length; sum.classList.remove("active");
+    $("upBar").value = 0; $("upPct").textContent = "";
+    $("upName").textContent = queue.length + " file dipilih";
+    $("upDet").textContent = "Total " + fmtSize(totalBytes()) + " \u00b7 siap diunggah";
+    $("uploadBtn").textContent = queue.length > 1 ? "Upload " + queue.length + " file" : "Upload";
+  }
+  $("file").addEventListener("change", () => { $("upErr").textContent = ""; $("upOk").textContent = ""; renderQueue(); });
+
+  async function uploadOne(q, category, album){
+    const f = q.f, type = typeOf(f);
+    if (!/^(video|audio)\//.test(type)) throw new Error("Bukan file video/audio");
+    if (!/\.(mp4|m4v|webm|mov|mp3|m4a|aac|wav|ogg|opus|flac)$/i.test(f.name)) throw new Error("Format tidak didukung (pakai mp4, m4v, webm, mov, mp3, m4a, aac, wav, ogg, opus, flac)");
+    if (f.size > cfg.maxUploadMB * 1048576) throw new Error("Terlalu besar (maks " + cfg.maxUploadMB + " MB)");
+    const r = await fetch("/api/presign", {
+      method: "POST", headers: {"Content-Type":"application/json","Authorization":"Bearer "+token},
+      body: JSON.stringify({ category, album, filename: f.name, contentType: type, size: f.size })
+    });
+    const d = await r.json();
+    if (r.status === 401){ adminExpired(); throw new Error("Sesi habis"); }
+    if (!r.ok) throw new Error(d.error || "Gagal memulai upload");
+    if (d.duplicate){ q.dup = d.where || true; return null; } // file yang sama sudah ada: tidak diunggah lagi
+
+    await putFile(d.uploadUrl, f, type, v => showProgress(v, "mengunggah"));
+
+    q.noThumb = false; q.key = d.key; q.album = d.album;
+    try{ const sec = await probeFile(f); if (sec) await saveDurations({ [d.key]: sec }); }
+    catch(e){ if (e.message === "Sesi habis") throw e; } // durasi bisa diisi nanti lewat tombol "Isi durasi media lama"
+    if (type.startsWith("video/")){
+      showProgress(100, "membuat thumbnail");
+      try{ await makeAndUploadThumb(f, d.key); }
+      catch(e){ if (e.message === "Sesi habis") throw e; q.noThumb = true; } // upload video tetap dianggap berhasil, tapi ditandai
+    }
+    return d.album;
+  }
+
+  $("uploadBtn").addEventListener("click", async () => {
+    const err = $("upErr"), ok = $("upOk"), btn = $("uploadBtn");
+    err.textContent = ""; ok.textContent = "";
+    if (!queue.length){ err.textContent = "Pilih file dulu."; return; }
+    const album = chosenAlbum(), category = catVal();
+    if (album.length < 2){ err.textContent = "Isi nama album (minimal 2 karakter)."; $("albumNew").focus(); return; }
+
+    const lock = v => { [btn, $("file"), $("albumSel"), $("albumNew"), ...document.querySelectorAll("input[name=cat]")].forEach(x => { x.disabled = v; }); };
+    lock(true);
+    const failed = [], failMsg = []; let done = 0, skipped = 0, lastAlbum = album;
+    doneBytes = 0; $("upFail").innerHTML = ""; $("upSum").hidden = false; $("upSum").classList.add("active");
+    for (let i = 0; i < queue.length; i++){
+      const q = queue[i]; curIdx = i; q.dup = false;
+      btn.textContent = "Mengunggah " + (i + 1) + " dari " + queue.length + "...";
+      showProgress(0, "memulai");
+      try{
+        lastAlbum = await uploadOne(q, category, album) || lastAlbum;
+        if (q.dup){ skipped++; }
+        else{
+          done++;
+          if (q.noThumb) thumbPending.push({ f: q.f, key: q.key, album: q.album });
+        }
+      }catch(e){
+        failed.push(q.f); failMsg.push({ name: q.f.name, msg: e.message });
+        if (e.message === "Sesi habis") return;
+      }
+      doneBytes += q.f.size;
+    }
+    curIdx = Math.max(0, queue.length - 1); showProgress(100, "");
+    $("upSum").classList.remove("active");
+    $("upName").textContent = failed.length ? "Selesai dengan " + failed.length + " gagal" : "Semua selesai ✓";
+    $("upDet").textContent = done + " berhasil" + (skipped ? " \u00b7 " + skipped + " dilewati (sudah ada)" : "") + (failed.length ? " \u00b7 " + failed.length + " gagal" : "");
+    failMsg.forEach(m => { // hanya file yang gagal yang ditampilkan sebagai daftar
+      const li = el("li", "failrow"), top = el("div", "uptop");
+      top.append(el("span", "upname", m.name), el("span", "upst", m.msg)); li.appendChild(top); $("upFail").appendChild(li);
+    });
+    lock(false);
+    ok.textContent = done + " file berhasil diunggah ke " + CATNAME[category] + " › " + lastAlbum + (skipped ? ", " + skipped + " dilewati karena sudah ada" : "") + (failed.length ? ", " + failed.length + " gagal" : "") + ".";
+    if (thumbPending.length) ok.textContent += " " + thumbPending.length + " video belum punya thumbnail, tekan \"Coba buat thumbnail lagi\".";
+    showThumbBtn();
+    if (failed.length) err.textContent = "Ada file yang gagal. Tekan Upload lagi untuk mencoba ulang file yang gagal saja.";
+    // sisakan hanya file yang gagal (di antrean & input) supaya bisa dicoba ulang
+    queue = queue.filter(q => failed.includes(q.f));
+    try{ const dt = new DataTransfer(); queue.forEach(q => dt.items.add(q.f)); $("file").files = dt.files; }catch(e){ if (!queue.length) $("file").value = ""; }
+    btn.textContent = queue.length > 1 ? "Upload " + queue.length + " file" : "Upload";
+    await loadMedia(lastAlbum);
+  });
+
+  /* ---------- media: daftar, pilih, hapus ---------- */
+  const checks = () => [...document.querySelectorAll("#alist input[data-key]")];
+  const selected = () => checks().filter(c => c.checked);
+  function sync(){
+    const n = selected().length;
+    $("selBar").hidden = !(tab === "media" && n);
+    $("selTxt").textContent = n + " file dipilih";
+    $("del").disabled = !n;
+    // status checkbox header album & "pilih semua"
+    document.querySelectorAll("#alist input[data-gh]").forEach(h => {
+      const mine = checks().filter(c => c.dataset.grp === h.dataset.gh);
+      h.checked = mine.length > 0 && mine.every(c => c.checked);
+      h.indeterminate = !h.checked && mine.some(c => c.checked);
+    });
+    const all = checks(); $("all").checked = all.length > 0 && all.every(c => c.checked);
+  }
+  /* ----- tampilan folder: kartu per folder, klik untuk melihat & mengelola isinya ----- */
+  let openFolder = null; // { cat, key (nama album huruf kecil), name }
+  const hue = s => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+  const ICON_FOLDER = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H9l2 2.5h7.5A2.5 2.5 0 0 1 21 9v8.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5v-11z"/></svg>';
+  const folderItems = f => items.filter(i => i.category === f.cat && i.album.toLowerCase() === f.key);
+  function foldersOf(){
+    const map = new Map();
+    items.forEach(i => {
+      const k = i.category + "/" + i.album.toLowerCase();
+      if (!map.has(k)) map.set(k, { cat: i.category, key: i.album.toLowerCase(), name: i.album, list: [], latest: 0, size: 0 });
+      const f = map.get(k); f.list.push(i); f.latest = Math.max(f.latest, ts(i)); f.size += i.size;
+    });
+    return [...map.values()].sort((a, b) => b.latest - a.latest);
+  }
+  function renderMedia(){
+    if (openFolder && !folderItems(openFolder).length) openFolder = null; // folder sudah kosong: kembali ke daftar folder
+    $("folderView").hidden = !!openFolder; $("fileView").hidden = !openFolder;
+    if (openFolder) renderFiles(); else renderFolders();
+  }
+  function renderFolders(){
+    $("alist").innerHTML = ""; sync();
+    const q = $("q").value.trim().toLowerCase(), all = foldersOf();
+    const cnt = c => all.filter(f => c === "all" || f.cat === c).length;
+    chips($("mediaChips"), [
+      { v:"all", t:"Semua", n:cnt("all") }, { v:"free", t:"Gratis", n:cnt("free") }, { v:"premium", t:"Premium", n:cnt("premium") }
+    ], F.media, v => { F.media = v; renderMedia(); });
+    const list = all.filter(f => (F.media === "all" || f.cat === F.media) &&
+      (!q || f.name.toLowerCase().includes(q) || f.list.some(i => i.title.toLowerCase().includes(q))));
+    const box = $("folders"); box.innerHTML = "";
+    if (!list.length){ box.appendChild(el("p", "empty", all.length ? "Tidak ada folder yang cocok." : "Belum ada media. Upload dulu lewat kartu di atas.")); return; }
+    list.forEach(f => {
+      const b = el("button", "fcard"); b.type = "button";
+      b.setAttribute("aria-label", "Buka folder " + f.name + ", " + CATNAME[f.cat] + ", " + f.list.length + " file");
+      const ic = el("span", "ficon"); ic.innerHTML = ICON_FOLDER; ic.style.setProperty("--h", hue(f.name.toLowerCase())); ic.setAttribute("aria-hidden", "true");
+      b.append(el("span", "pill " + f.cat, CATNAME[f.cat]), ic, el("b", "", f.name), el("small", "", f.list.length + " file · " + fmtSize(f.size)));
+      b.addEventListener("click", () => { openFolder = { cat: f.cat, key: f.key, name: f.name }; $("fq").value = ""; renderMedia(); window.scrollTo(0, 0); });
+      box.appendChild(b);
+    });
+  }
+  function renderFiles(){
+    const f = openFolder, all = folderItems(f), keep = new Set(selected().map(c => c.dataset.key));
+    $("fName").textContent = f.name;
+    $("fPill").className = "pill " + f.cat; $("fPill").textContent = CATNAME[f.cat];
+    $("fMeta").textContent = all.length + " file · " + fmtSize(all.reduce((s, i) => s + i.size, 0));
+    $("fRename").hidden = f.cat !== "premium"; // folder gratis adalah folder internal
+    const q = $("fq").value.trim().toLowerCase();
+    const list = all.filter(i => !q || i.title.toLowerCase().includes(q)).sort((a, b) => ts(b) - ts(a));
+    const ul = $("alist"); ul.innerHTML = "";
+    if (!list.length){ const li = el("li", "empty", "Tidak ada file yang cocok."); li.style.display = "block"; ul.appendChild(li); sync(); return; }
+    list.forEach(it => {
+      const li = el("li");
+      const cb = el("input"); cb.type = "checkbox"; cb.dataset.key = it.key; cb.checked = keep.has(it.key); cb.setAttribute("aria-label", "Pilih " + it.title);
+      cb.addEventListener("change", sync);
+      const mid = el("div");
+      mid.append(
+        el("div", "name", it.title),
+        el("div", "meta", (it.type === "audio" ? "Audio" : "Video") + " · " + fmtSize(it.size) + " · " + fmtDateTime(it.lastModified)),
+        el("div", "meta", (it.views || 0) + " tayangan · " + (it.likes || 0) + " suka · " + (it.comments || 0) + " komentar")
+      );
+      const acts = el("div", "acts");
+      if (it.url){
+        const open = el("a", "", "Buka"); open.href = it.url; open.target = "_blank"; open.rel = "noopener";
+        const cp = el("button", "", "Salin link"); cp.type = "button";
+        cp.addEventListener("click", async () => {
+          try{ await navigator.clipboard.writeText(it.url); cp.textContent = "Tersalin"; setTimeout(() => cp.textContent = "Salin link", 1500); }
+          catch(e){ prompt("Salin link:", it.url); }
+        });
+        acts.append(open, cp);
+      }
+      const cm = el("button", "", "Komentar" + (it.comments ? " (" + it.comments + ")" : "")); cm.type = "button";
+      cm.addEventListener("click", () => openCm(it));
+      acts.appendChild(cm);
+      const mv = el("button", "mv", it.category === "free" ? "Ke Premium" : "Ke Gratis"); mv.type = "button";
+      mv.addEventListener("click", () => openMove([it.key], it.category === "free" ? "premium" : "free"));
+      acts.appendChild(mv);
+      li.append(cb, mid, acts); ul.appendChild(li);
+    });
+    sync();
+  }
+
+  // aksi folder
+  async function moveAll(keys, category, album){
+    for (let i = 0; i < keys.length; i += 200){
+      const r = await api("/api/move", { keys: keys.slice(i, i + 200), category, album });
+      if (r.status === 401){ adminExpired(); throw new Error("Sesi habis"); }
+      if (!r.ok) throw new Error(r.d.error || "Gagal memindahkan");
+    }
+  }
+  $("fBack").addEventListener("click", () => { openFolder = null; renderMedia(); window.scrollTo(0, 0); });
+  $("fq").addEventListener("input", renderMedia);
+  $("fUp").addEventListener("click", () => {
+    const f = openFolder; if (!f) return;
+    document.querySelector("input[name=cat][value=" + f.cat + "]").checked = true;
+    refreshAlbumChoices();
+    if (f.cat === "premium"){ const o = [...$("albumSel").options].find(o => o.value.toLowerCase() === f.key); if (o){ $("albumSel").value = o.value; toggleNew(); } }
+    $("upDetails").open = true; $("upDetails").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  $("fRename").addEventListener("click", async () => {
+    const f = openFolder; if (!f) return;
+    const typed = prompt("Nama baru folder:", f.name); if (typed === null) return;
+    let name = typed.replace(/[^\p{L}\p{N} _-]/gu, "").replace(/\s+/g, " ").trim();
+    if (name.length < 2){ $("aerr").textContent = "Nama folder minimal 2 karakter (huruf, angka, spasi, - atau _)."; window.scrollTo(0, 0); return; }
+    if (name === f.name) return;
+    const other = foldersOf().find(x => x.cat === "premium" && x.key === name.toLowerCase() && x.key !== f.key);
+    if (other){ if (!confirm('Folder "' + other.name + '" sudah ada. Gabungkan isi folder ini ke sana?')) return; name = other.name; }
+    $("aerr").textContent = ""; $("fRename").disabled = true;
+    try{
+      await moveAll(folderItems(f).map(i => i.key), "premium", name);
+      openFolder = { cat: "premium", key: name.toLowerCase(), name };
+    }catch(e){ $("aerr").textContent = e.message; window.scrollTo(0, 0); }
+    finally{ $("fRename").disabled = false; }
+    await loadMedia();
+  });
+  $("fDel").addEventListener("click", async () => {
+    const f = openFolder; if (!f) return;
+    const keys = folderItems(f).map(i => i.key);
+    if (!confirm('Hapus folder "' + f.name + '" beserta ' + keys.length + " file di dalamnya secara permanen? Tindakan ini tidak bisa dibatalkan.")) return;
+    $("aerr").textContent = ""; $("fDel").disabled = true;
+    try{
+      for (let i = 0; i < keys.length; i += 1000){
+        const r = await api("/api/delete", { keys: keys.slice(i, i + 1000) });
+        if (r.status === 401){ adminExpired(); return; }
+        if (!r.ok) throw new Error(r.d.error || "Gagal menghapus");
+      }
+      openFolder = null;
+    }catch(e){ $("aerr").textContent = e.message; window.scrollTo(0, 0); }
+    finally{ $("fDel").disabled = false; }
+    await loadMedia();
+  });
+  $("all").addEventListener("change", e => { checks().forEach(c => { c.checked = e.target.checked; }); sync(); });
+  $("q").addEventListener("input", renderMedia);
+  $("del").addEventListener("click", async () => {
+    const keys = selected().map(c => c.dataset.key);
+    if (!keys.length) return;
+    if (!confirm("Hapus " + keys.length + " file secara permanen? Tindakan ini tidak bisa dibatalkan.")) return;
+    $("del").disabled = true; $("aerr").textContent = "";
+    try{
+      const r = await fetch("/api/delete", { method:"POST",
+        headers:{"Content-Type":"application/json","Authorization":"Bearer "+token}, body: JSON.stringify({ keys }) });
+      const d = await r.json();
+      if (r.status === 401){ adminExpired(); return; }
+      if (!r.ok) throw new Error(d.error || "Gagal menghapus");
+      await loadMedia();
+    }catch(ex){ $("aerr").textContent = ex.message; sync(); }
+  });
+
+  /* ---------- pindahkan file (Gratis <-> Premium) ---------- */
+  let mvKeys = [];
+  const mvCat = () => document.querySelector("input[name=mvcat]:checked").value;
+  const itemOf = k => items.find(i => i.key === k) || {};
+  function mvToggle(){
+    const prem = mvCat() === "premium";
+    $("mvAlbumBox").hidden = !prem; $("mvFreeNote").hidden = prem;
+    $("mvNew").hidden = $("mvAlbum").value !== NEW;
+  }
+  function mvFillAlbums(){
+    const sel = $("mvAlbum"), names = albumsOf("premium").map(a => a.name);
+    sel.innerHTML = "";
+    names.forEach(n => { const o = el("option", "", n); o.value = n; sel.appendChild(o); });
+    const o = el("option", "", "+ Buat album baru"); o.value = NEW; sel.appendChild(o);
+    if (!names.length) sel.value = NEW;
+    mvToggle();
+  }
+  function openMove(keys, dest){
+    if (!keys.length) return;
+    mvKeys = keys; $("mvErr").textContent = "";
+    const cats = new Set(keys.map(k => itemOf(k).category));
+    dest = dest || (cats.size === 1 && cats.has("premium") ? "free" : "premium");
+    document.querySelector("input[name=mvcat][value=" + dest + "]").checked = true;
+    $("mvTitle").textContent = keys.length > 1 ? "Pindahkan " + keys.length + " file" : "Pindahkan file";
+    $("mvInfo").textContent = keys.length === 1 ? (itemOf(keys[0]).title || "") : "Pilih tujuan untuk file yang dipilih.";
+    $("mvNew").value = ""; mvFillAlbums();
+    $("mvSheet").hidden = false; document.body.classList.add("noscroll");
+  }
+  function closeMove(){ $("mvSheet").hidden = true; document.body.classList.remove("noscroll"); }
+  document.querySelectorAll("input[name=mvcat]").forEach(r => r.addEventListener("change", mvToggle));
+  $("mvAlbum").addEventListener("change", () => { mvToggle(); if (!$("mvNew").hidden) $("mvNew").focus(); });
+  $("mvBtn").addEventListener("click", () => openMove(selected().map(c => c.dataset.key)));
+  $("mvClose").addEventListener("click", closeMove);
+  $("mvBg").addEventListener("click", closeMove);
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("mvSheet").hidden) closeMove(); });
+  $("mvGo").addEventListener("click", async () => {
+    const dest = mvCat(), err = $("mvErr"), btn = $("mvGo"); err.textContent = "";
+    let album = "";
+    if (dest === "premium"){
+      album = $("mvAlbum").value === NEW ? $("mvNew").value.replace(/[^\p{L}\p{N} _-]/gu, "").replace(/\s+/g, " ").trim() : $("mvAlbum").value;
+      if (album.length < 2){ err.textContent = "Isi nama album (minimal 2 karakter)."; $("mvNew").focus(); return; }
+      const same = albumsOf("premium").find(a => a.name.toLowerCase() === album.toLowerCase()); if (same) album = same.name;
+    }
+    const keys = dest === "free" ? mvKeys.filter(k => itemOf(k).category !== "free") : mvKeys;
+    if (!keys.length){ err.textContent = "File yang dipilih sudah ada di Gratis."; return; }
+    btn.disabled = true; btn.textContent = "Memindahkan...";
+    try{
+      const r = await api("/api/move", { keys, category: dest, album });
+      if (r.status === 401){ adminExpired(); return; }
+      if (!r.ok) throw new Error(r.d.error || "Gagal memindahkan");
+      closeMove(); await loadMedia();
+    }catch(e){ err.textContent = e.message; loadMedia(); }
+    finally{ btn.disabled = false; btn.textContent = "Pindahkan"; }
+  });
+
+  /* ---------- moderasi komentar ---------- */
+  let cmItem = null;
+  const cmErr = m => { $("cmErr").textContent = m || ""; };
+  function closeCm(){ $("cmSheet").hidden = true; document.body.classList.remove("noscroll"); cmItem = null; }
+  function renderCm(list){
+    const ul = $("cmList"); ul.innerHTML = "";
+    if (!list.length){ ul.appendChild(el("li", "empty", "Belum ada komentar.")); return; }
+    list.forEach(c => {
+      const li = el("li"), box = el("div"), who = el("div");
+      who.append(el("b", "", c.username), el("small", "", fmtDateTime(c.createdAt)));
+      box.append(who, el("p", "", c.body));
+      const del = el("button", "btn danger", "Hapus"); del.type = "button";
+      del.style.padding = "6px 12px"; del.style.fontSize = ".86rem";
+      del.addEventListener("click", async () => {
+        if (!confirm("Hapus komentar dari " + c.username + "?")) return;
+        del.disabled = true; cmErr("");
+        const r = await api("/api/admin/comments/" + c.id + "/delete", {});
+        if (r.status === 401){ adminExpired(); return; }
+        if (!r.ok && r.status !== 404){ del.disabled = false; cmErr(r.d.error || "Gagal menghapus komentar"); return; }
+        li.remove();
+        if (cmItem){ cmItem.comments = Math.max(0, (cmItem.comments || 0) - 1); renderFiles(); }
+        if (!$("cmList").children.length) renderCm([]);
+      });
+      li.append(box, del); ul.appendChild(li);
+    });
+  }
+  async function openCm(it){
+    cmItem = it; cmErr("");
+    $("cmTitle").textContent = "Komentar · " + it.title;
+    const ul = $("cmList"); ul.innerHTML = ""; ul.appendChild(el("li", "empty", "Memuat..."));
+    $("cmSheet").hidden = false; document.body.classList.add("noscroll");
+    try{
+      const r = await api("/api/admin/comments?key=" + encodeURIComponent(it.key));
+      if (r.status === 401){ adminExpired(); return; }
+      if (!r.ok) throw new Error(r.d.error || "Gagal memuat komentar");
+      if (cmItem === it) renderCm(r.d.items);
+    }catch(e){ ul.innerHTML = ""; cmErr(e.message); }
+  }
+  $("cmClose").addEventListener("click", closeCm);
+  $("cmBg").addEventListener("click", closeCm);
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("cmSheet").hidden) closeCm(); });
+
+  /* ---------- pembayaran ---------- */
+  async function decide(id, act, body){
+    const r = await api("/api/admin/payments/" + id + "/" + act, body || {});
+    if (r.status === 401){ adminExpired(); return; }
+    if (!r.ok){ $("payErr").textContent = r.d.error || "Gagal memproses"; renderPays(); return; }
+    loadPay();
+  }
+  const PSTAT = { pending:"Menunggu", approved:"Disetujui", rejected:"Ditolak" };
+  function renderPays(){
+    const cnt = s => pays.filter(p => s === "all" || p.status === s).length;
+    chips($("payChips"), [
+      { v:"pending", t:"Menunggu", n:cnt("pending") }, { v:"approved", t:"Disetujui", n:cnt("approved") },
+      { v:"rejected", t:"Ditolak", n:cnt("rejected") }, { v:"all", t:"Semua", n:cnt("all") }
+    ], F.pay, v => { F.pay = v; renderPays(); });
+
+    const list = pays.filter(p => F.pay === "all" || p.status === F.pay);
+    const ul = $("payList"); ul.innerHTML = "";
+    if (!list.length){
+      ul.appendChild(el("li", "empty", F.pay === "pending" ? "Tidak ada bukti transfer yang menunggu." : "Belum ada data."));
+      return;
+    }
+    list.slice().sort((a, b) => (a.status === "pending" ? 0 : 1) - (b.status === "pending" ? 0 : 1)).forEach(p => {
+      const li = el("li");
+      const a = el("a"); a.href = p.proofUrl || "#"; a.target = "_blank"; a.rel = "noopener";
+      const img = el("img"); img.alt = "Bukti " + p.username; img.loading = "lazy"; if (p.proofUrl) img.src = p.proofUrl; a.appendChild(img);
+      const mid = el("div"), nm = el("div", "name", p.username);
+      nm.append(" ", el("span", "pill " + p.status, PSTAT[p.status]));
+      mid.append(nm, el("div", "meta", rupiah(p.amount) + " · " + durTxt(p.months) + " · " + fmtDateTime(p.createdAt) + (p.reason ? " · " + p.reason : "")));
+      const acts = el("div", "pacts");
+      if (p.status === "pending"){
+        const sel = el("select"); sel.setAttribute("aria-label", "Durasi");
+        [...new Set([1, 12, p.months])].sort((a, b) => a - b).forEach(m => { const o = el("option", "", durTxt(m)); o.value = m; if (m === p.months) o.selected = true; sel.appendChild(o); });
+        const ok = el("button", "btn", "Setujui"); ok.type = "button";
+        ok.addEventListener("click", () => { ok.disabled = true; decide(p.id, "approve", { months: Number(sel.value) }); });
+        const no = el("button", "btn danger", "Tolak"); no.type = "button";
+        no.addEventListener("click", () => {
+          const reason = prompt("Alasan penolakan (boleh kosong):"); if (reason === null) return;
+          no.disabled = true; decide(p.id, "reject", { reason });
+        });
+        acts.append(sel, ok, no);
+      }
+      li.append(a, mid, acts); ul.appendChild(li);
+    });
+  }
+
+  $("priceBtn").addEventListener("click", async () => {
+    const err = $("priceErr"), ok = $("priceOk"), btn = $("priceBtn");
+    err.textContent = ""; ok.textContent = "";
+    const p1 = Number($("price1").value), p12 = Number($("price12").value);
+    const valid = n => Number.isInteger(n) && n >= 1000 && n <= 10000000;
+    if (!valid(p1) || !valid(p12)){ err.textContent = "Isi harga dengan angka bulat antara Rp1.000 dan Rp10.000.000."; return; }
+    btn.disabled = true;
+    try{
+      const r = await api("/api/admin/prices", { plans: { 1: p1, 12: p12 } });
+      if (r.status === 401){ adminExpired(); return; }
+      if (!r.ok) throw new Error(r.d.error || "Gagal menyimpan harga");
+      ok.textContent = "Harga disimpan. Berlaku untuk tagihan baru.";
+      loadPay();
+    }catch(e){ err.textContent = e.message; }
+    finally{ btn.disabled = false; }
+  });
+
+  $("qrisBtn").addEventListener("click", async () => {
+    const f = $("qrisFile").files[0], err = $("qrisErr"), ok = $("qrisOk"), btn = $("qrisBtn");
+    err.textContent = ""; ok.textContent = "";
+    if (!f){ err.textContent = "Pilih gambar QRIS dulu."; return; }
+    if (!/^image\/(jpeg|png|webp)$/.test(f.type)){ err.textContent = "QRIS harus berupa gambar JPG, PNG, atau WebP."; return; }
+    if (f.size > 5 * 1048576){ err.textContent = "Ukuran gambar maksimal 5 MB."; return; }
+    btn.disabled = true;
+    try{
+      const p = await api("/api/payment/qris-presign", { contentType: f.type, size: f.size });
+      if (p.status === 401){ adminExpired(); return; }
+      if (!p.ok) throw new Error(p.d.error || "Gagal memulai upload");
+      await putFile(p.d.uploadUrl, f, f.type);
+      $("qrisFile").value = ""; ok.textContent = "QRIS berhasil disimpan.";
+      loadPay();
+    }catch(e){ err.textContent = e.message; }
+    finally{ btn.disabled = false; }
+  });
+
+  /* ---------- aplikasi Android (APK) ---------- */
+  async function loadApk(){
+    try{
+      const r = await api("/api/admin/apk");
+      if (r.status === 401){ adminExpired(); return; }
+      $("apkNow").textContent = r.ok && r.d.available
+        ? "Saat ini: " + (r.d.version ? "v" + r.d.version + " · " : "") + fmtSize(r.d.size) + " · diperbarui " + fmtDateTime(r.d.updatedAt)
+        : "Belum ada APK yang diunggah.";
+    }catch(e){ $("apkNow").textContent = ""; }
+  }
+  $("apkBtn").addEventListener("click", async () => {
+    const f = $("apkFile").files[0], err = $("apkErr"), ok = $("apkOk"), btn = $("apkBtn"), bar = $("apkBar");
+    err.textContent = ""; ok.textContent = "";
+    if (!f){ err.textContent = "Pilih file APK dulu."; return; }
+    if (!/\.apk$/i.test(f.name)){ err.textContent = "File harus berformat .apk."; return; }
+    if (f.size > cfg.maxUploadMB * 1048576){ err.textContent = "Terlalu besar (maks " + cfg.maxUploadMB + " MB)."; return; }
+    btn.disabled = true; bar.hidden = false; bar.value = 0;
+    try{
+      const p = await api("/api/admin/apk-presign", { size: f.size, name: f.name });
+      if (p.status === 401){ adminExpired(); return; }
+      if (!p.ok) throw new Error(p.d.error || "Gagal memulai upload");
+      await putFile(p.d.uploadUrl, f, p.d.contentType, v => { bar.value = v; ok.textContent = "Mengunggah " + v + "%"; });
+      const c = await api("/api/admin/apk-commit", { version: $("apkVer").value.trim() });
+      if (c.status === 401){ adminExpired(); return; }
+      if (!c.ok) throw new Error(c.d.error || "Gagal menyimpan info versi");
+      $("apkFile").value = ""; $("apkVer").value = ""; ok.textContent = "APK berhasil diunggah. Pengguna sudah bisa mengunduhnya di Profil.";
+      loadApk();
+    }catch(e){ err.textContent = e.message; ok.textContent = ""; }
+    finally{ btn.disabled = false; bar.hidden = true; }
+  });
+
+  /* ---------- pengguna ---------- */
+  function renderUsers(){
+    const q = $("uq").value.trim().toLowerCase();
+    const match = (u, f) => f === "all" || (f === "premium") === isActive(u);
+    const cnt = f => users.filter(u => match(u, f)).length;
+    chips($("userChips"), [
+      { v:"all", t:"Semua", n:cnt("all") }, { v:"premium", t:"Premium", n:cnt("premium") }, { v:"free", t:"Gratis", n:cnt("free") }
+    ], F.user, v => { F.user = v; renderUsers(); });
+
+    const list = users.filter(u => match(u, F.user) && (!q || u.username.toLowerCase().includes(q)));
+    const ul = $("userList"); ul.innerHTML = "";
+    if (!list.length){ ul.appendChild(el("li", "empty", users.length ? "Tidak ada pengguna yang cocok." : "Belum ada pengguna.")); return; }
+    list.forEach(u => {
+      const li = el("li", "nothumb"), mid = el("div");
+      const nm = el("div", "name", u.username);
+      nm.append(" ", el("span", "pill " + (isActive(u) ? "premium" : "pending"), isActive(u) ? "Premium" : "Gratis"));
+      mid.append(nm, el("div", "meta", (isActive(u) ? "Sampai " + fmtDate(u.premiumUntil) : "Akun gratis") + " · " + (u.hasPassword ? "pakai password" : "tanpa password")));
+      const acts = el("div", "pacts");
+      if (u.hasPassword){
+        const b = el("button", "btn ghost", "Hapus password"); b.type = "button";
+        b.addEventListener("click", async () => {
+          if (!confirm("Hapus password " + u.username + "? Akun bisa dimasuki hanya dengan username sampai user membuat password baru.")) return;
+          const r = await api("/api/admin/users/" + encodeURIComponent(u.key) + "/clear-password", {});
+          if (r.status === 401){ adminExpired(); return; }
+          if (!r.ok){ $("payErr").textContent = r.d.error || "Gagal menghapus password"; return; }
+          loadPay();
+        });
+        acts.appendChild(b);
+      }
+      li.append(mid, acts); ul.appendChild(li);
+    });
+  }
+  $("uq").addEventListener("input", renderUsers);
+
+  /* ---------- kirim notifikasi ---------- */
+  function fillNotifyTargets(){
+    const sel = $("nfTo"), cur = sel.value || "all";
+    sel.innerHTML = "";
+    const add = (v, t) => { const o = el("option", "", t); o.value = v; sel.appendChild(o); };
+    add("all", "Semua pengguna (" + users.length + ")");
+    users.forEach(u => add(u.key, u.username));
+    sel.value = [...sel.options].some(o => o.value === cur) ? cur : "all";
+  }
+  $("nfBtn").addEventListener("click", async () => {
+    const title = $("nfTitle").value.trim(), body = $("nfBody").value.trim(), to = $("nfTo").value || "all";
+    $("nfErr").textContent = ""; $("nfOk").textContent = "";
+    if (!title){ $("nfErr").textContent = "Judul wajib diisi"; $("nfTitle").focus(); return; }
+    const label = to === "all" ? "semua pengguna" : $("nfTo").selectedOptions[0].textContent;
+    if (!confirm("Kirim notifikasi ke " + label + "?")) return;
+    $("nfBtn").disabled = true;
+    try{
+      const r = await api("/api/admin/notify", { title, body, to });
+      if (r.status === 401){ adminExpired(); return; }
+      if (!r.ok){ $("nfErr").textContent = r.d.error || "Gagal mengirim notifikasi"; return; }
+      $("nfOk").textContent = "Terkirim ke " + label + ".";
+      $("nfTitle").value = ""; $("nfBody").value = "";
+    }catch(e){ $("nfErr").textContent = "Tidak bisa terhubung ke server"; }
+    finally{ $("nfBtn").disabled = false; }
+  });
+
+  /* ---------- start: wajib sudah login admin di halaman utama ---------- */
+  async function start(){
+    token = ss.get(TOKEN_KEY);
+    if (!token){ toLogin(""); return; }
+    try{
+      const r = await fetch("/api/me", { headers:{ Authorization:"Bearer " + token } });
+      if (r.status === 401){ adminExpired(); return; }
+      if (!r.ok) throw new Error("server");
+    }catch(e){
+      $("aerr").textContent = "Tidak bisa terhubung ke server. Muat ulang halaman.";
+    }
+    try{ const r = await fetch("/api/config"); if (r.ok) cfg = Object.assign(cfg, await r.json()); }catch(e){}
+    $("admin").hidden = false;
+    setTab(TITLES[location.hash.slice(1)] ? location.hash.slice(1) : "home");
+    loadMedia(); loadPay(); loadApk();
+    // bukti transfer baru muncul otomatis (tiap 30 detik, hanya saat halaman terlihat)
+    setInterval(() => { if (document.visibilityState === "visible") loadPay(); }, 30000);
+  }
+  start();
+})();
+</script>
+<script>if("serviceWorker"in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){});});}</script>
+</body>
+</html>
