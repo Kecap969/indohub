@@ -36,6 +36,11 @@
 
     <!-- Beranda -->
     <section class="apane" id="pane-home" aria-label="Beranda">
+      <div class="aquick" aria-label="Aksi cepat">
+        <button class="btn" id="qUp" type="button">+ Upload video</button>
+        <button class="btn ghost" id="qPay" type="button">Cek pembayaran</button>
+        <button class="btn ghost" id="qNf" type="button">Kirim notifikasi</button>
+      </div>
       <div class="astats" id="homeStats"></div>
       <div class="acard todo" id="todoCard" hidden>
         <div><b id="todoTxt"></b><small>Periksa bukti transfernya lalu setujui atau tolak.</small></div>
@@ -108,6 +113,7 @@
         <summary>Pengaturan QRIS &amp; harga</summary>
         <p class="hint" style="margin-top:12px">Harga langganan saat ini: <b id="priceTxt">-</b></p>
         <div class="row">
+          <label class="hint" style="flex:1 1 140px">1 hari (Rp)<input class="pricein" id="price0" type="number" inputmode="numeric" min="1000" max="10000000" step="500"></label>
           <label class="hint" style="flex:1 1 140px">1 bulan (Rp)<input class="pricein" id="price1" type="number" inputmode="numeric" min="1000" max="10000000" step="500"></label>
           <label class="hint" style="flex:1 1 140px">1 tahun (Rp)<input class="pricein" id="price12" type="number" inputmode="numeric" min="1000" max="10000000" step="500"></label>
         </div>
@@ -165,6 +171,8 @@
       <button class="btn danger" id="del" type="button">Hapus</button>
     </div>
   </div>
+
+  <button class="btn fab" id="fabUp" type="button" hidden>+ Upload</button>
 
   <!-- Pindahkan file antara Gratis dan Premium -->
   <div class="sheet" id="mvSheet" hidden role="dialog" aria-modal="true" aria-label="Pindahkan file">
@@ -230,7 +238,7 @@
   });
   const ss = store(window.sessionStorage);
   const rupiah = n => "Rp" + Number(n).toLocaleString("id-ID");
-  const durTxt = m => m % 12 === 0 ? (m / 12) + " thn" : m + " bln";
+  const durTxt = m => m === 0 ? "1 hari" : m % 12 === 0 ? (m / 12) + " thn" : m + " bln";
   const fmtDate = d => new Date(d).toLocaleDateString("id-ID", { day:"numeric", month:"short", year:"numeric" });
   const fmtDateTime = d => new Date(d).toLocaleString("id-ID", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" });
   const fmtSize = b => b >= 1073741824 ? (b/1073741824).toFixed(1)+" GB" : b >= 1048576 ? (b/1048576).toFixed(1)+" MB" : Math.max(1,Math.round(b/1024))+" KB";
@@ -281,7 +289,7 @@
   const TITLES = { home:"Beranda", media:"Media", pay:"Pembayaran", users:"Pengguna" };
   function setTab(name){
     if (!TITLES[name]) name = "home";
-    tab = name; $("aTitle").textContent = TITLES[name];
+    tab = name; $("aTitle").textContent = TITLES[name]; $("fabUp").hidden = name !== "media";
     Object.keys(TITLES).forEach(t => { $("pane-" + t).hidden = t !== name; });
     document.querySelectorAll(".bottomnav button").forEach(b => {
       if (b.dataset.tab === name) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
@@ -290,6 +298,13 @@
     sync(); window.scrollTo(0, 0);
   }
   document.querySelectorAll(".bottomnav button").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
+  // jalan pintas: buka form upload / kirim notifikasi langsung dari mana saja
+  function openForm(tabName, id){ setTab(tabName); const d = $(id); d.open = true; requestAnimationFrame(() => d.scrollIntoView({ behavior: "smooth", block: "start" })); }
+  const openUp = () => openForm("media", "upDetails");
+  function openNf(to){ openForm("users", "nfDetails"); if (to){ $("nfTo").value = to; $("nfTitle").focus({ preventScroll: true }); } }
+  $("qUp").addEventListener("click", openUp); $("fabUp").addEventListener("click", openUp);
+  $("qNf").addEventListener("click", () => openNf());
+  $("qPay").addEventListener("click", () => goPay("pending"));
   window.addEventListener("hashchange", () => { const n = location.hash.slice(1); if (TITLES[n] && n !== tab) setTab(n); });
 
   // deretan filter (chip)
@@ -325,6 +340,7 @@
       const pl = r.d.plans;
       $("priceTxt").textContent = pl ? rupiah(pl[1]) + " / bulan · " + rupiah(pl[12]) + " / tahun" : "Belum diatur";
       if (pl){ // jangan menimpa isian yang sedang diketik
+        if (document.activeElement !== $("price0")) $("price0").value = pl[0] || 10000;
         if (document.activeElement !== $("price1")) $("price1").value = pl[1];
         if (document.activeElement !== $("price12")) $("price12").value = pl[12];
       }
@@ -369,7 +385,7 @@
       b.append(ic, el("b", "", String(val)), el("span", "", label));
       b.addEventListener("click", go); box.appendChild(b);
     });
-    $("todoCard").hidden = !pend;
+    $("todoCard").hidden = !pend; $("qPay").textContent = pend ? "Cek pembayaran (" + pend + ")" : "Cek pembayaran";
     if (pend) $("todoTxt").textContent = pend + " bukti transfer menunggu verifikasi";
 
     const ul = $("recentList"); ul.innerHTML = "";
@@ -969,7 +985,7 @@
       const acts = el("div", "pacts");
       if (p.status === "pending"){
         const sel = el("select"); sel.setAttribute("aria-label", "Durasi");
-        [...new Set([1, 12, p.months])].sort((a, b) => a - b).forEach(m => { const o = el("option", "", durTxt(m)); o.value = m; if (m === p.months) o.selected = true; sel.appendChild(o); });
+        [...new Set([0, 1, 12, p.months])].sort((a, b) => a - b).forEach(m => { const o = el("option", "", durTxt(m)); o.value = m; if (m === p.months) o.selected = true; sel.appendChild(o); });
         const ok = el("button", "btn", "Setujui"); ok.type = "button";
         ok.addEventListener("click", () => { ok.disabled = true; decide(p.id, "approve", { months: Number(sel.value) }); });
         const no = el("button", "btn danger", "Tolak"); no.type = "button";
@@ -986,12 +1002,12 @@
   $("priceBtn").addEventListener("click", async () => {
     const err = $("priceErr"), ok = $("priceOk"), btn = $("priceBtn");
     err.textContent = ""; ok.textContent = "";
-    const p1 = Number($("price1").value), p12 = Number($("price12").value);
+    const p0 = Number($("price0").value), p1 = Number($("price1").value), p12 = Number($("price12").value);
     const valid = n => Number.isInteger(n) && n >= 1000 && n <= 10000000;
-    if (!valid(p1) || !valid(p12)){ err.textContent = "Isi harga dengan angka bulat antara Rp1.000 dan Rp10.000.000."; return; }
+    if (!valid(p0) || !valid(p1) || !valid(p12)){ err.textContent = "Isi harga dengan angka bulat antara Rp1.000 dan Rp10.000.000."; return; }
     btn.disabled = true;
     try{
-      const r = await api("/api/admin/prices", { plans: { 1: p1, 12: p12 } });
+      const r = await api("/api/admin/prices", { plans: { 0: p0, 1: p1, 12: p12 } });
       if (r.status === 401){ adminExpired(); return; }
       if (!r.ok) throw new Error(r.d.error || "Gagal menyimpan harga");
       ok.textContent = "Harga disimpan. Berlaku untuk tagihan baru.";
@@ -1078,6 +1094,8 @@
         });
         acts.appendChild(b);
       }
+      const msg = el("button", "btn ghost", "Kirim pesan"); msg.type = "button";
+      msg.addEventListener("click", () => openNf(u.key)); acts.appendChild(msg);
       li.append(mid, acts); ul.appendChild(li);
     });
   }

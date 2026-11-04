@@ -54,6 +54,12 @@
       <div id="albumView">
         <div class="subcard" id="subCard" hidden></div>
         <h2 class="tabttl" id="catTitle"></h2>
+        <div class="ugbar" id="ugBar" hidden>
+          <button class="btn" id="ugBtn" type="button">+ Upload video</button>
+          <input id="ugFile" type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.m4v,.mov,.webm" hidden>
+          <div id="ugProg" hidden><progress id="ugBarP" max="100" value="0"></progress><small id="ugTxt"></small></div>
+          <p class="err" id="ugErr" role="alert"></p>
+        </div>
         <ul class="vgrid flat" id="homeList" aria-label="Video gratis" hidden></ul>
         <div class="albums" id="albums"></div>
       </div>
@@ -165,6 +171,10 @@
       <div id="stepPay" hidden>
         <p class="stephd"><span class="stepn">1</span>Pilih paket</p>
         <div class="plans" role="radiogroup" aria-label="Pilih paket">
+          <label class="plan wide">
+            <input type="radio" name="mon" value="0">
+            <span class="pbox"><span class="pname">1 hari</span><b class="pprice" id="plan0">-</b><small>akses penuh 24 jam, tanpa langganan</small></span>
+          </label>
           <label class="plan">
             <input type="radio" name="mon" value="1" checked>
             <span class="pbox"><span class="pname">1 bulan</span><b class="pprice" id="plan1">-</b><small>per bulan</small></span>
@@ -242,7 +252,7 @@
   });
   const ls = store(window.localStorage), ss = store(window.sessionStorage);
   const rupiah = n => "Rp" + Number(n).toLocaleString("id-ID");
-  const durTxt = m => m % 12 === 0 ? (m / 12) + " tahun" : m + " bulan";
+  const durTxt = m => m === 0 ? "1 hari" : m % 12 === 0 ? (m / 12) + " tahun" : m + " bulan";
   const fmtDate = d => new Date(d).toLocaleDateString("id-ID", { day:"numeric", month:"short", year:"numeric" });
   // panggilan API: otomatis membawa token admin atau token user
   async function api(path, body, method){
@@ -367,7 +377,7 @@
   function renderAlbums(){
     const cat = tab === "premium" ? "premium" : "free";
     $("catTitle").textContent = cat === "premium" ? "Album premium" : "Video gratis";
-    renderSubCard(cat);
+    renderSubCard(cat); $("ugBar").hidden = cat !== "free";
     // Home: semua video gratis langsung tampil (tanpa folder). Premium tetap per album.
     $("albums").hidden = cat === "free"; $("homeList").hidden = cat !== "free";
     if (cat === "free"){ renderFree(); return; }
@@ -475,8 +485,39 @@
       const dur = el("span", "tdur", it.duration ? fmtDur(it.duration) : ""); // durasi dari server: tampil langsung, tanpa memuat video
       b.append(play, num, dur);
       b.addEventListener("click", () => { if (it.locked) openSheet(); else openPlayer(i); });
-      li.appendChild(b); list.appendChild(li);
+      li.appendChild(b);
+      if (it.uploader){ // video komunitas: tampilkan pengunggah; pemilik bisa menghapus videonya sendiri
+        const row = el("div", "uby", "oleh " + it.uploader);
+        if (it.mine){ const d = el("button", "udel", "Hapus"); d.type = "button"; d.addEventListener("click", () => delMine(it)); row.appendChild(d); }
+        li.appendChild(row);
+      }
+      list.appendChild(li);
     });
+  }
+
+  /* ---------- upload video oleh pengguna (Gratis › Komunitas) ---------- */
+  const ugType = f => /^video\//.test(f.type) ? f.type : (/\.mov$/i.test(f.name) ? "video/quicktime" : "video/mp4");
+  $("ugBtn").addEventListener("click", () => $("ugFile").click());
+  $("ugFile").addEventListener("change", async () => {
+    const f = $("ugFile").files[0]; $("ugFile").value = ""; if (!f) return;
+    const err = $("ugErr"), btn = $("ugBtn"), bar = $("ugBarP"), txt = $("ugTxt");
+    err.textContent = ""; btn.disabled = true; $("ugProg").hidden = false; bar.hidden = false; bar.value = 0; txt.textContent = "Menyiapkan...";
+    try{
+      const type = ugType(f), r = await api("/api/user/presign", { filename: f.name, contentType: type, size: f.size });
+      if (r.status === 401){ userExpired(); return; }
+      if (!r.ok) throw new Error(r.d.error || "Gagal menyiapkan upload");
+      if (r.d.duplicate){ bar.hidden = true; txt.textContent = "Video ini sudah ada di " + r.d.where + "."; return; }
+      await putFile(r.d.uploadUrl, f, type, v => { bar.value = v; txt.textContent = "Mengunggah " + v + "%"; });
+      txt.textContent = "Selesai ✓ Videomu sudah tayang."; await loadItems();
+    }catch(e){ err.textContent = e.message; $("ugProg").hidden = true; }
+    finally{ btn.disabled = false; }
+  });
+  async function delMine(it){
+    if (!confirm("Hapus video ini? Like dan komentarnya ikut terhapus.")) return;
+    const r = await api("/api/user/delete", { key: it.key });
+    if (r.status === 401){ userExpired(); return; }
+    if (!r.ok){ $("ugErr").textContent = r.d.error || "Gagal menghapus video"; return; }
+    loadItems();
   }
 
   /* ---------- pemutar layar penuh ---------- */
@@ -843,7 +884,7 @@
     c.classList.remove("waiting");
     const t = el("div"), b = el("button", "btn", me.premiumUntil ? "Perpanjang" : "Berlangganan sekarang"); b.type = "button";
     if (me.premiumUntil) t.append(el("b", "", "Premium aktif"), el("small", "", "Berlaku sampai " + fmtDate(me.premiumUntil)));
-    else t.append(el("b", "", "Buka semua album premium"), el("small", "", cfg.plans ? "Mulai " + rupiah(cfg.plans[1]) + " / bulan · " + rupiah(cfg.plans[12]) + " / tahun" : "Berlangganan untuk membuka semua album"));
+    else t.append(el("b", "", "Buka semua album premium"), el("small", "", cfg.plans ? "Mulai " + rupiah(cfg.plans[0] || 10000) + " / hari · " + rupiah(cfg.plans[1]) + " / bulan · " + rupiah(cfg.plans[12]) + " / tahun" : "Berlangganan untuk membuka semua album"));
     b.addEventListener("click", openSheet);
     c.append(ic, t);
     if (!me.premiumUntil){
@@ -858,9 +899,9 @@
 
   // isi harga paket di jendela berlangganan dari konfigurasi server
   function renderPlans(){
-    if (!cfg.plans){ $("plan1").textContent = "-"; $("plan12").textContent = "-"; $("plan12s").textContent = "\u00a0"; $("saveBadge").hidden = true; return; }
+    if (!cfg.plans){ $("plan0").textContent = "-"; $("plan1").textContent = "-"; $("plan12").textContent = "-"; $("plan12s").textContent = "\u00a0"; $("saveBadge").hidden = true; return; }
     const p1 = cfg.plans[1], p12 = cfg.plans[12];
-    $("plan1").textContent = rupiah(p1); $("plan12").textContent = rupiah(p12);
+    $("plan0").textContent = rupiah(cfg.plans[0] || 10000); $("plan1").textContent = rupiah(p1); $("plan12").textContent = rupiah(p12);
     $("plan12s").textContent = "≈ " + rupiah(Math.round(p12 / 12)) + " / bulan";
     const save = Math.round((1 - p12 / (p1 * 12)) * 100);
     $("saveBadge").hidden = save <= 0; $("saveBadge").textContent = "Hemat " + save + "%";

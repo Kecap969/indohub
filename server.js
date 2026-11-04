@@ -170,13 +170,17 @@ function addMonths(d, n) {
   return r;
 }
 /* ---------- harga paket: sumber tunggal = tabel ih_settings (key "plans"), diubah hanya oleh admin ---------- */
-const PLAN_MONTHS = [1, 12]; // paket yang tersedia: 1 bulan & 1 tahun
+const PLAN_MONTHS = [1, 12]; // paket wajib: 1 bulan & 1 tahun
+const PLAN_DAY = 0, DAY_PRICE = 10000; // paket 1 hari disimpan sebagai months = 0; harga bawaan Rp10.000 (bisa diubah admin)
+const PLAN_KEYS = [PLAN_DAY, ...PLAN_MONTHS];
+const addPlan = (d, m) => m === PLAN_DAY ? new Date(d.getTime() + 24 * 60 * 60 * 1000) : addMonths(d, m);
 const validPrice = (v) => { const n = Number(v); return Number.isInteger(n) && n >= 1000 && n <= 10000000 ? n : null; };
 async function getPlans() { // { 1: harga, 12: harga } atau null kalau belum diatur
   const rows = await db("GET", "ih_settings?key=eq.plans&select=value");
   const v = rows[0] && rows[0].value;
   const out = {};
   PLAN_MONTHS.forEach((m) => { const n = v ? validPrice(v[m]) : null; if (n) out[m] = n; });
+  out[PLAN_DAY] = (v && validPrice(v[PLAN_DAY])) || DAY_PRICE;
   return PLAN_MONTHS.every((m) => out[m]) ? out : null;
 }
 const notify = (u, title, body) => db("POST", "ih_notifications", { username_lc: u, title, body }, "return=minimal");
@@ -368,6 +372,20 @@ app.get("/api/notifs", needUser, needDb, async (req, res) => {
 // Struktur bucket: free/<album>/<ts>-<file>, premium/<album>/<ts>-<file>
 // File lama di uploads/<user>/... ditampilkan sebagai album "Lainnya" (gratis).
 const LEGACY_ALBUM = "Lainnya";
+/* ---------- video komunitas: pengguna biasa boleh upload ke Gratis › Komunitas ---------- */
+const COMMUNITY = "Komunitas", USER_MAX_MB = 500, USER_DAILY = 5;
+// nama file: <waktu>-u~<username>~<nama>; pengunggah dibaca dari nama file (tanpa tabel baru)
+const COMM_RE = /^(\d{10,})-u~([a-z0-9_-]+)~(.+)$/;
+const fileInfo = (key) => { const m = COMM_RE.exec(key.split("/").pop()); return m ? { ts: Number(m[1]), owner: m[2], name: m[3] } : null; };
+const whereOf = (k) => { const p = k.split("/"); return p[0] === "uploads" ? "Gratis" : (p[0] === "premium" ? "Premium" : "Gratis") + " › " + p[1]; };
+// Anti-duplikat: nama file (tanpa awalan waktu/pengunggah) dan ukuran sama dengan yang sudah ada = file yang sama
+async function findSame(safeName, size) {
+  const base = (k) => k.split("/").pop().replace(/^\d{10,}-(u~[^~]+~)?/, "").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(-80).toLowerCase();
+  try {
+    const want = safeName.toLowerCase();
+    return (await Promise.all(["free/", "premium/", "uploads/"].map(listPrefix))).flat().find((o) => o.Size === size && base(o.Key) === want) || null;
+  } catch (e) { console.error("Cek duplikat gagal, upload tetap dilanjutkan:", e.message); return null; }
+}
 const prettyTitle = (f) => f.replace(/^\d+-/, "").replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim() || f;
 
 async function listPrefix(prefix) {
@@ -397,11 +415,14 @@ app.get("/api/list", needR2, async (req, res) => {
         const parts = o.Key.split("/");
         const legacy = parts[0] === "uploads";
         if (!legacy && parts.length < 3) return null; // harus free|premium/<album>/<file>
+        const info = fileInfo(o.Key);
         return {
           key: o.Key,
           category: legacy ? "free" : parts[0],
           album: legacy ? LEGACY_ALBUM : parts[1],
-          title: prettyTitle(parts[parts.length - 1]),
+          title: prettyTitle(info ? info.name : parts[parts.length - 1]),
+          uploader: info ? info.owner : undefined,
+          mine: !!(info && t && t.k === "user" && info.owner === t.u),
           size: o.Size,
           lastModified: o.LastModified,
           type: AUDIO.test(o.Key) ? "audio" : "video",
@@ -552,18 +573,8 @@ app.post("/api/presign", needAdmin, needR2, async (req, res) => {
     return res.status(400).json({ error: `Ukuran file maksimal ${SITE.maxUploadMB} MB` });
 
   const safeName = filename.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(-80) || "file";
-  // Anti-duplikat: nama file (tanpa awalan waktu) dan ukuran sama dengan yang sudah ada di perpustakaan = file yang sama.
-  // File baru tidak diunggah, jadi file lama beserta like/komentar/tayangannya tetap utuh.
-  const baseName = (k) => k.split("/").pop().replace(/^\d{10,}-/, "").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(-80).toLowerCase();
-  try {
-    const want = safeName.toLowerCase();
-    const same = (await Promise.all(["free/", "premium/", "uploads/"].map(listPrefix))).flat()
-      .find((o) => o.Size === size && baseName(o.Key) === want);
-    if (same) {
-      const p = same.Key.split("/");
-      return res.json({ duplicate: true, key: same.Key, where: p[0] === "uploads" ? "Gratis" : (p[0] === "premium" ? "Premium" : "Gratis") + " › " + p[1] });
-    }
-  } catch (e) { console.error("Cek duplikat gagal, upload tetap dilanjutkan:", e.message); }
+  const same = await findSame(safeName, size); // file yang sama tidak diunggah ulang: like/komentar/tayangan lama tetap utuh
+  if (same) return res.json({ duplicate: true, key: same.Key, where: whereOf(same.Key) });
   const key = `${category}/${albumName}/${Date.now()}-${safeName}`;
   try {
     const uploadUrl = await getSignedUrl(r2(), new PutObjectCommand({ Bucket: bucket(), Key: key, ContentType: contentType }), { expiresIn: 900 });
@@ -572,6 +583,31 @@ app.post("/api/presign", needAdmin, needR2, async (req, res) => {
 });
 
 // thumbnail video disimpan terpisah di thumbs/<key-video>.jpg supaya video premium tetap tidak bocor
+app.post("/api/user/presign", needUser, needR2, async (req, res) => {
+  const { filename, contentType, size } = req.body || {};
+  if (!/^video\//.test(contentType || "") || typeof filename !== "string" || !VIDEO.test(filename))
+    return res.status(400).json({ error: "Hanya video (mp4, m4v, webm, atau mov) yang boleh diupload" });
+  if (!size || size > USER_MAX_MB * 1024 * 1024) return res.status(400).json({ error: `Ukuran video maksimal ${USER_MAX_MB} MB` });
+  const safeName = filename.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(-80) || "video.mp4";
+  try {
+    const today = (await listPrefix(`free/${COMMUNITY}/`)).filter((o) => { const i = fileInfo(o.Key); return i && i.owner === req.user && Date.now() - i.ts < 864e5; });
+    if (today.length >= USER_DAILY) return res.status(429).json({ error: `Batas upload ${USER_DAILY} video per hari sudah tercapai. Coba lagi besok.` });
+    const same = await findSame(safeName, size);
+    if (same) return res.json({ duplicate: true, key: same.Key, where: whereOf(same.Key) });
+    const key = `free/${COMMUNITY}/${Date.now()}-u~${req.user}~${safeName}`;
+    const uploadUrl = await getSignedUrl(r2(), new PutObjectCommand({ Bucket: bucket(), Key: key, ContentType: contentType }), { expiresIn: 900 });
+    res.json({ uploadUrl, key });
+  } catch (e) { fail(res, e, "Gagal menyiapkan upload"); }
+});
+app.post("/api/user/delete", needUser, needR2, async (req, res) => { // pengguna hanya bisa menghapus videonya sendiri
+  const key = String((req.body && req.body.key) || "");
+  const info = new RegExp("^free/" + COMMUNITY + "/[^/]+$").test(key) ? fileInfo(key) : null;
+  if (!info || info.owner !== req.user) return res.status(403).json({ error: "Hanya bisa menghapus video milikmu sendiri" });
+  try {
+    const { bad } = await removeMedia([key]);
+    bad.size ? res.status(500).json({ error: "Gagal menghapus. Coba lagi." }) : res.json({ deleted: 1 });
+  } catch (e) { fail(res, e, "Gagal menghapus video"); }
+});
 app.post("/api/presign-thumb", needAdmin, needR2, async (req, res) => {
   const key = (req.body && req.body.key) || "";
   if (typeof key !== "string" || !/^(free|premium)\/[^/]+\/[^/]+$/.test(key) || key.includes("..") || !VIDEO.test(key))
@@ -582,13 +618,8 @@ app.post("/api/presign-thumb", needAdmin, needR2, async (req, res) => {
   } catch (e) { fail(res, e, "Gagal membuat URL thumbnail"); }
 });
 
-app.post("/api/delete", needAdmin, needR2, async (req, res) => {
-  const keys = (req.body && req.body.keys) || [];
-  if (!Array.isArray(keys) || !keys.length || keys.length > 1000)
-    return res.status(400).json({ error: "Daftar file tidak valid" });
-  if (!keys.every((k) => typeof k === "string" && /^(free|premium|uploads)\//.test(k) && !k.includes("..")))
-    return res.status(400).json({ error: "Hanya file di folder free/, premium/ atau uploads/ yang boleh dihapus" });
-  try {
+// Hapus file + thumbnail + like/komentar/tayangan + durasi (dipakai admin dan pemilik video komunitas)
+async function removeMedia(keys) {
     const all = keys.concat(keys.filter((k) => !k.startsWith("uploads/")).map((k) => `thumbs/${k}.jpg`));
     const bad = new Set();
     for (let i = 0; i < all.length; i += 1000) {
@@ -600,6 +631,17 @@ app.post("/api/delete", needAdmin, needR2, async (req, res) => {
       try { await db("POST", "rpc/ih_drop_media", { keys: gone }); } catch (e) { console.error("Gagal membersihkan data interaksi:", e.message); }
     }
     if (gone.length) await editDur((cur) => { let ch = false; gone.forEach((k) => { if (k in cur) { delete cur[k]; ch = true; } }); return ch; });
+  return { gone, bad };
+}
+
+app.post("/api/delete", needAdmin, needR2, async (req, res) => {
+  const keys = (req.body && req.body.keys) || [];
+  if (!Array.isArray(keys) || !keys.length || keys.length > 1000)
+    return res.status(400).json({ error: "Daftar file tidak valid" });
+  if (!keys.every((k) => typeof k === "string" && /^(free|premium|uploads)\//.test(k) && !k.includes("..")))
+    return res.status(400).json({ error: "Hanya file di folder free/, premium/ atau uploads/ yang boleh dihapus" });
+  try {
+    const { gone, bad } = await removeMedia(keys);
     if (bad.size) return res.status(500).json({ error: `${keys.length - gone.length} file gagal dihapus. Coba lagi.`, deleted: gone.length });
     res.json({ deleted: keys.length });
   } catch (e) { fail(res, e, "Gagal menghapus file"); }
@@ -683,7 +725,7 @@ app.get("/api/payment/info", needUser, needDb, needR2, async (req, res) => {
 // Buat/ubah tagihan (status "waiting") dengan kode unik supaya mudah dicocokkan admin
 app.post("/api/payment/start", needUser, needDb, async (req, res) => {
   const months = Number((req.body || {}).months);
-  if (!PLAN_MONTHS.includes(months)) return res.status(400).json({ error: "Durasi tidak valid" });
+  if (!PLAN_KEYS.includes(months)) return res.status(400).json({ error: "Durasi tidak valid" });
   try {
     const plans = await getPlans(); // harga selalu dari database, tidak pernah dari klien
     if (!plans) return res.status(503).json({ error: "Harga langganan belum tersedia, coba lagi nanti" });
@@ -845,7 +887,7 @@ app.post("/api/admin/payments/:id/approve", needAdmin, needDb, async (req, res) 
     const p = (await db("GET", `ih_payments?id=eq.${req.params.id}&select=id,username_lc,months,status`))[0];
     if (!p || p.status !== "pending") return res.status(400).json({ error: "Pembayaran ini sudah diproses atau belum dikirim" });
     const askM = Number((req.body || {}).months);
-    const months = PLAN_MONTHS.includes(askM) ? askM : p.months;
+    const months = PLAN_KEYS.includes(askM) ? askM : p.months;
     // klaim dulu secara atomik: kalau 2 permintaan masuk bersamaan (klik ganda / jaringan lambat), hanya satu yang lolos
     const claimed = await db("PATCH", `ih_payments?id=eq.${p.id}&status=eq.pending&select=id`, { status: "approved", months, decided_at: new Date().toISOString() });
     if (!claimed || !claimed.length) return res.status(400).json({ error: "Pembayaran ini sudah diproses atau belum dikirim" });
@@ -854,13 +896,13 @@ app.post("/api/admin/payments/:id/approve", needAdmin, needDb, async (req, res) 
       // perpanjang dari tanggal berakhir kalau masih aktif, selain itu dari sekarang
       const cur = (await db("GET", `ih_subscriptions?username_lc=eq.${enc(p.username_lc)}&select=expires_at`))[0];
       const base = cur && new Date(cur.expires_at) > new Date() ? new Date(cur.expires_at) : new Date();
-      exp = addMonths(base, months);
+      exp = addPlan(base, months);
       await db("POST", "ih_subscriptions?on_conflict=username_lc", { username_lc: p.username_lc, expires_at: exp.toISOString() }, "resolution=merge-duplicates,return=minimal");
     } catch (e) { // gagal memberi premium: kembalikan ke "menunggu" supaya bisa disetujui ulang
       await db("PATCH", `ih_payments?id=eq.${p.id}`, { status: "pending", decided_at: null }, "return=minimal").catch(() => {});
       throw e;
     }
-    await notify(p.username_lc, "Pembayaran disetujui", `Premium aktif sampai ${exp.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}.`);
+    await notify(p.username_lc, "Pembayaran disetujui", `Premium aktif sampai ${exp.toLocaleString("id-ID", months === PLAN_DAY ? { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" } : { day: "numeric", month: "long", year: "numeric" })}${months === PLAN_DAY ? " WIB" : ""}.`);
     res.json({ ok: true, expiresAt: exp.toISOString() });
   } catch (e) { fail(res, e, "Gagal menyetujui"); }
 });
@@ -886,6 +928,9 @@ app.post("/api/admin/prices", needAdmin, needDb, async (req, res) => {
     if (!n) return res.status(400).json({ error: `Harga paket ${m === 12 ? "1 tahun" : m + " bulan"} harus angka bulat antara Rp1.000 dan Rp10.000.000` });
     clean[m] = n;
   }
+  const day = inc[PLAN_DAY] == null ? DAY_PRICE : validPrice(inc[PLAN_DAY]);
+  if (!day) return res.status(400).json({ error: "Harga paket 1 hari harus angka bulat antara Rp1.000 dan Rp10.000.000" });
+  clean[PLAN_DAY] = day;
   try {
     await db("POST", "ih_settings?on_conflict=key", { key: "plans", value: clean, updated_at: new Date().toISOString() }, "resolution=merge-duplicates,return=minimal");
     res.json({ ok: true, plans: clean });

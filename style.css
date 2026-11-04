@@ -725,3 +725,21 @@ button,a,input,select,summary,label{touch-action:manipulation}
 /* input harga di dashboard admin */
 .pricein{display:block;width:100%;height:42px;padding:0 12px;margin-top:4px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit}
 .pricein:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 20%,transparent)}
+
+/* ===== admin: jalan pintas supaya tidak perlu mencari form ===== */
+.aquick{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.aquick .btn{flex:1 1 auto}
+#upDetails>summary,#nfDetails>summary{color:var(--accent)}
+#upDetails>summary::before,#nfDetails>summary::before{content:"+ ";font-weight:800}
+.fab{position:fixed;z-index:30;right:16px;bottom:calc(92px + env(safe-area-inset-bottom,0px));border-radius:999px;padding:13px 20px;box-shadow:var(--shadow)}
+.fab[hidden],.selbar:not([hidden]) + .fab{display:none}
+@media (min-width:900px){.fab{right:28px;bottom:28px}}
+
+/* ===== upload video oleh pengguna ===== */
+.ugbar{margin:0 0 14px;max-width:760px}
+.ugbar progress{display:block;width:100%;height:8px;margin-top:10px}
+.ugbar small{display:block;margin-top:4px;color:var(--muted)}
+.uby{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:4px;font-size:.78rem;color:var(--muted)}
+.udel{background:none;border:0;color:var(--err);font:inherit;padding:2px 4px;cursor:pointer}
+
+.plans .plan.wide{grid-column:1/-1}
