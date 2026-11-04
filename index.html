@@ -55,10 +55,10 @@
         <div class="subcard" id="subCard" hidden></div>
         <h2 class="tabttl" id="catTitle"></h2>
         <div class="ugbar" id="ugBar" hidden>
-          <button class="btn" id="ugBtn" type="button">+ Upload video</button>
           <input id="ugFile" type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.m4v,.mov,.webm" hidden>
-          <div id="ugProg" hidden><progress id="ugBarP" max="100" value="0"></progress><small id="ugTxt"></small></div>
-          <p class="err" id="ugErr" role="alert"></p>
+          <div class="ugtoast" id="ugProg" role="status" aria-live="polite" hidden><progress id="ugBarP" max="100" value="0"></progress><small id="ugTxt"></small></div>
+          <p class="ugtoast err" id="ugErr" role="alert"></p>
+          <button class="btn ugfab" id="ugBtn" type="button" aria-label="Upload video"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Upload</span></button>
         </div>
         <ul class="vgrid flat" id="homeList" aria-label="Video gratis" hidden></ul>
         <div class="albums" id="albums"></div>
@@ -497,26 +497,29 @@
 
   /* ---------- upload video oleh pengguna (Gratis › Komunitas) ---------- */
   const ugType = f => /^video\//.test(f.type) ? f.type : (/\.mov$/i.test(f.name) ? "video/quicktime" : "video/mp4");
+  // toast melayang: otomatis hilang beberapa detik setelah upload selesai / gagal
+  let ugT = 0;
+  function ugHide(ms){ clearTimeout(ugT); ugT = setTimeout(() => { $("ugProg").hidden = true; $("ugErr").textContent = ""; }, ms); }
   $("ugBtn").addEventListener("click", () => $("ugFile").click());
   $("ugFile").addEventListener("change", async () => {
     const f = $("ugFile").files[0]; $("ugFile").value = ""; if (!f) return;
     const err = $("ugErr"), btn = $("ugBtn"), bar = $("ugBarP"), txt = $("ugTxt");
-    err.textContent = ""; btn.disabled = true; $("ugProg").hidden = false; bar.hidden = false; bar.value = 0; txt.textContent = "Menyiapkan...";
+    clearTimeout(ugT); err.textContent = ""; btn.disabled = true; $("ugProg").hidden = false; bar.hidden = false; bar.value = 0; txt.textContent = "Menyiapkan...";
     try{
       const type = ugType(f), r = await api("/api/user/presign", { filename: f.name, contentType: type, size: f.size });
       if (r.status === 401){ userExpired(); return; }
       if (!r.ok) throw new Error(r.d.error || "Gagal menyiapkan upload");
-      if (r.d.duplicate){ bar.hidden = true; txt.textContent = "Video ini sudah ada di " + r.d.where + "."; return; }
+      if (r.d.duplicate){ bar.hidden = true; txt.textContent = "Video ini sudah ada di " + r.d.where + "."; ugHide(5000); return; }
       await putFile(r.d.uploadUrl, f, type, v => { bar.value = v; txt.textContent = "Mengunggah " + v + "%"; });
-      txt.textContent = "Selesai ✓ Videomu sudah tayang."; await loadItems();
-    }catch(e){ err.textContent = e.message; $("ugProg").hidden = true; }
+      txt.textContent = "Selesai ✓ Videomu sudah tayang."; ugHide(4000); await loadItems();
+    }catch(e){ err.textContent = e.message; $("ugProg").hidden = true; ugHide(6000); }
     finally{ btn.disabled = false; }
   });
   async function delMine(it){
     if (!confirm("Hapus video ini? Like dan komentarnya ikut terhapus.")) return;
     const r = await api("/api/user/delete", { key: it.key });
     if (r.status === 401){ userExpired(); return; }
-    if (!r.ok){ $("ugErr").textContent = r.d.error || "Gagal menghapus video"; return; }
+    if (!r.ok){ $("ugErr").textContent = r.d.error || "Gagal menghapus video"; ugHide(6000); return; }
     loadItems();
   }
 

@@ -405,30 +405,25 @@ button,a,input,select,summary,label{touch-action:manipulation}
 .nfform select,.nfform input,.nfform textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit;margin-bottom:6px}
 .nfform textarea{resize:vertical;min-height:72px}
 
-/* ===== navbar pengguna: pil melayang, ringan & elegan (navbar admin tidak berubah) ===== */
-#app{padding-bottom:calc(100px + env(safe-area-inset-bottom,0px))}
+/* ===== navbar pengguna: bar penuh yang menempel di bawah layar (seperti navigasi HP) ===== */
+#app{padding-bottom:calc(76px + env(safe-area-inset-bottom,0px))}
 #app .bottomnav{
-  left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));max-width:420px;margin:0 auto;
-  gap:2px;padding:6px;border:1px solid color-mix(in srgb,var(--line) 70%,transparent);border-radius:28px;
-  background:color-mix(in srgb,var(--surface) 88%,transparent);
+  left:0;right:0;bottom:0;max-width:none;margin:0;gap:0;
+  padding:4px max(6px,calc((100% - 560px) / 2)) env(safe-area-inset-bottom,0px);
+  border:0;border-top:1px solid var(--line);border-radius:0;
+  background:color-mix(in srgb,var(--surface) 96%,transparent);
   -webkit-backdrop-filter:blur(18px) saturate(1.4);backdrop-filter:blur(18px) saturate(1.4);
-  box-shadow:0 12px 32px rgba(15,25,35,.16),0 2px 6px rgba(15,25,35,.08);
-}
-@media (prefers-color-scheme:dark){
-  #app .bottomnav{box-shadow:0 12px 32px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.35)}
+  box-shadow:none;
 }
 #app .bottomnav button{
-  min-height:56px;gap:4px;padding:8px 2px 6px;border-radius:22px;font-size:.7rem;font-weight:600;letter-spacing:.01em;
-  color:color-mix(in srgb,var(--muted) 92%,transparent);
+  min-height:56px;gap:3px;padding:8px 2px 6px;border-radius:0;font-size:.7rem;font-weight:600;letter-spacing:.01em;
+  color:color-mix(in srgb,var(--muted) 92%,transparent);background:none;
 }
-#app .bottomnav button svg{width:23px;height:23px;stroke-width:1.7}
-#app .bottomnav button:hover{color:var(--ink);background:color-mix(in srgb,var(--ink) 5%,transparent)}
-#app .bottomnav button[aria-current="page"]{
-  color:var(--accent-ink);
-  background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 62%,#7b5cff));
-  box-shadow:0 6px 16px color-mix(in srgb,var(--accent) 38%,transparent);
-}
-#app .bottomnav button[aria-current="page"] svg{stroke-width:2.1;transform:translateY(-1px) scale(1.06)}
+#app .bottomnav button svg{width:24px;height:24px;stroke-width:1.7}
+#app .bottomnav button:hover{color:var(--ink);background:none}
+#app .bottomnav button[aria-current="page"]{color:var(--accent);background:none;box-shadow:none}
+#app .bottomnav button[aria-current="page"] svg{stroke-width:2.1;transform:none}
+#app .bottomnav button[aria-current="page"]::before{content:"";position:absolute;top:-5px;left:30%;right:30%;height:3px;border-radius:0 0 3px 3px;background:var(--accent)}
 #app .bottomnav .dot{top:5px;left:calc(50% + 6px);box-shadow:0 0 0 2px var(--surface)}
 
 /* ===== UI berlangganan premium: kartu & jendela pembayaran ===== */
@@ -500,7 +495,7 @@ button,a,input,select,summary,label{touch-action:manipulation}
 .vgrid .skeltile{aspect-ratio:1/1;border-radius:16px;background:var(--line);animation:pulse 1.3s ease-in-out infinite}
 
 /* ===== dashboard admin: tampilan profesional ===== */
-#admin{--aside:244px;padding-bottom:calc(104px + env(safe-area-inset-bottom,0px))}
+#admin{--aside:244px;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 #admin .atop{position:sticky;top:0;z-index:20;padding:calc(14px + env(safe-area-inset-top,0px)) clamp(16px,4vw,32px) 14px;
   background:var(--bg);border-bottom:1px solid var(--line)}
 #admin .atop h1{font-size:1.4rem;letter-spacing:-.02em}
@@ -544,7 +539,7 @@ button,a,input,select,summary,label{touch-action:manipulation}
 #admin .albumrow select,#admin .albumrow input[type=text]{border-radius:10px;height:42px}
 
 /* bar aksi saat file dipilih */
-.selbar{z-index:31;left:12px;right:12px;max-width:560px;bottom:calc(96px + env(safe-area-inset-bottom,0px));border-radius:16px;padding:10px 12px 10px 16px}
+.selbar{z-index:31;left:12px;right:12px;max-width:560px;bottom:calc(76px + env(safe-area-inset-bottom,0px));border-radius:16px;padding:10px 12px 10px 16px}
 .selact{display:flex;gap:8px}
 .selact .btn{padding:9px 16px;border-radius:10px;font-size:.92rem}
 
@@ -555,19 +550,18 @@ button,a,input,select,summary,label{touch-action:manipulation}
 #mvSheet select:focus,#mvSheet input[type=text]:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 20%,transparent)}
 #mvSheet .btn{margin-top:8px}
 
-/* navbar admin: pil melayang di HP (sama dengan navbar pengguna) */
+/* navbar admin: bar penuh menempel di bawah layar HP (sama dengan navbar pengguna) */
 #admin .abrand{display:none}
-#admin .bottomnav{left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));max-width:440px;margin:0 auto;gap:2px;padding:6px;
-  border:1px solid color-mix(in srgb,var(--line) 70%,transparent);border-radius:28px;background:color-mix(in srgb,var(--surface) 88%,transparent);
-  -webkit-backdrop-filter:blur(18px) saturate(1.4);backdrop-filter:blur(18px) saturate(1.4);
-  box-shadow:0 12px 32px rgba(15,25,35,.16),0 2px 6px rgba(15,25,35,.08)}
-@media (prefers-color-scheme:dark){#admin .bottomnav{box-shadow:0 12px 32px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.35)}}
-#admin .bottomnav button{min-height:56px;gap:4px;padding:8px 2px 6px;border-radius:22px;font-size:.7rem;letter-spacing:.01em}
-#admin .bottomnav button svg{width:23px;height:23px;stroke-width:1.7}
-#admin .bottomnav button:hover{color:var(--ink);background:color-mix(in srgb,var(--ink) 5%,transparent)}
-#admin .bottomnav button[aria-current="page"]{color:var(--accent-ink);background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 62%,#7b5cff));
-  box-shadow:0 6px 16px color-mix(in srgb,var(--accent) 38%,transparent)}
-#admin .bottomnav button[aria-current="page"] svg{stroke-width:2.1}
+#admin .bottomnav{left:0;right:0;bottom:0;max-width:none;margin:0;gap:0;
+  padding:4px max(6px,calc((100% - 560px) / 2)) env(safe-area-inset-bottom,0px);
+  border:0;border-top:1px solid var(--line);border-radius:0;background:color-mix(in srgb,var(--surface) 96%,transparent);
+  -webkit-backdrop-filter:blur(18px) saturate(1.4);backdrop-filter:blur(18px) saturate(1.4);box-shadow:none}
+#admin .bottomnav button{min-height:56px;gap:3px;padding:8px 2px 6px;border-radius:0;font-size:.7rem;letter-spacing:.01em;background:none}
+#admin .bottomnav button svg{width:24px;height:24px;stroke-width:1.7}
+#admin .bottomnav button:hover{color:var(--ink);background:none}
+#admin .bottomnav button[aria-current="page"]{color:var(--accent);background:none;box-shadow:none}
+#admin .bottomnav button[aria-current="page"] svg{stroke-width:2.1;transform:none}
+#admin .bottomnav button[aria-current="page"]::before{content:"";position:absolute;top:-5px;left:30%;right:30%;height:3px;border-radius:0 0 3px 3px;background:var(--accent)}
 #admin .bottomnav .dot{top:5px;left:calc(50% + 6px);box-shadow:0 0 0 2px var(--surface)}
 
 /* desktop: sidebar kiri */
@@ -582,8 +576,11 @@ button,a,input,select,summary,label{touch-action:manipulation}
   #admin .abrand .logo svg{width:18px;height:18px;margin-left:2px}
   #admin .abrand b{display:block;font:800 1.1rem/1.15 "Bricolage Grotesque",system-ui,sans-serif;letter-spacing:-.02em}
   #admin .abrand small{display:block;color:var(--muted);font-size:.78rem}
+  #admin .bottomnav{padding:22px 14px}
   #admin .bottomnav button{flex-direction:row;justify-content:flex-start;gap:12px;min-height:46px;padding:0 14px;border-radius:12px;font-size:.95rem}
-  #admin .bottomnav button[aria-current="page"]{box-shadow:0 6px 14px color-mix(in srgb,var(--accent) 30%,transparent)}
+  #admin .bottomnav button:hover{background:color-mix(in srgb,var(--ink) 5%,transparent)}
+  #admin .bottomnav button[aria-current="page"]{color:var(--accent-ink);background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 62%,#7b5cff));box-shadow:0 6px 14px color-mix(in srgb,var(--accent) 30%,transparent)}
+  #admin .bottomnav button[aria-current="page"]::before{display:none}
   #admin .bottomnav .dot{position:static;margin-left:auto;box-shadow:none}
   #admin .atop{padding-inline:32px}
   .selbar{left:calc(var(--aside) + 28px);right:28px;bottom:24px;max-width:620px;margin:0}
@@ -619,7 +616,7 @@ button,a,input,select,summary,label{touch-action:manipulation}
 .tile .tnum{display:inline-flex;align-items:center;gap:4px}
 .tile .tnum svg{width:15px;height:15px;flex:none}
 
-.vrail{position:absolute;z-index:3;right:10px;bottom:calc(112px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;align-items:center;gap:18px}
+.vrail{position:absolute;z-index:3;right:10px;bottom:calc(100px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;align-items:center;gap:18px}
 .rbtn{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:48px;color:#fff;
   -webkit-tap-highlight-color:transparent;text-shadow:0 1px 4px rgba(0,0,0,.65)}
 .rbtn .ric{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:rgba(0,0,0,.45);transition:transform .15s var(--ease),background-color .15s}
@@ -736,9 +733,21 @@ button,a,input,select,summary,label{touch-action:manipulation}
 @media (min-width:900px){.fab{right:28px;bottom:28px}}
 
 /* ===== upload video oleh pengguna ===== */
-.ugbar{margin:0 0 14px;max-width:760px}
-.ugbar progress{display:block;width:100%;height:8px;margin-top:10px}
-.ugbar small{display:block;margin-top:4px;color:var(--muted)}
+/* upload video pengguna: FAB melayang + toast progres (hanya di tab Beranda) */
+.ugbar{margin:0;height:0}
+.ugfab{position:fixed;z-index:30;display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:14px 20px 14px 16px;
+  right:max(16px,calc(50% - 280px + 10px));bottom:calc(80px + env(safe-area-inset-bottom,0px));box-shadow:var(--shadow);font-weight:700}
+.ugfab svg{flex:none}
+.ugfab:disabled{opacity:.6;pointer-events:none}
+.ugtoast{position:fixed;z-index:31;left:16px;right:16px;max-width:420px;margin:0 auto;bottom:calc(148px + env(safe-area-inset-bottom,0px));
+  padding:12px 16px;border-radius:14px;background:var(--surface);color:var(--ink);border:1px solid var(--line);box-shadow:var(--shadow);
+  animation:ugin .22s cubic-bezier(.2,.7,.2,1)}
+.ugtoast[hidden],.ugtoast:empty{display:none}
+.ugtoast progress{display:block;width:100%;height:8px}
+.ugtoast small{display:block;margin-top:6px;color:var(--muted)}
+p.ugtoast.err{margin-top:0;color:var(--err,#c0392b);border-color:currentColor}
+@keyframes ugin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.ugtoast{animation:none}}
 .uby{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:4px;font-size:.78rem;color:var(--muted)}
 .udel{background:none;border:0;color:var(--err);font:inherit;padding:2px 4px;cursor:pointer}
 
